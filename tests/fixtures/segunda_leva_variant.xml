@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 20001102//EN"    "http://www.w3.org/TR/2000/CR-SVG-20001102/DTD/svg-20001102.dtd" [
+    <!ENTITY ns_graphs "http://ns.adobe.com/Graphs/1.0/">
+    <!ENTITY ns_vars "http://ns.adobe.com/Variables/1.0/">
+    <!ENTITY ns_imrep "http://ns.adobe.com/ImageReplacement/1.0/">
+    <!ENTITY ns_custom "http://ns.adobe.com/GenericCustomNamespace/1.0/">
+    <!ENTITY ns_flows "http://ns.adobe.com/Flows/1.0/">
+    <!ENTITY ns_extend "http://ns.adobe.com/Extensibility/1.0/">
+]>
+<svg xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWJHZW5lcmF0ZWRTeW50aGV0aWNDMlBBTWFuaWZlc3REYXRh</c2pa:manifest></metadata>
+<variableSets  xmlns="&ns_vars;">
+    <variableSet  locked="none" varSetName="CrachasCorporativos">
+        <variables>
+            <variable category="&ns_flows;" trait="textcontent" varName="NomeFuncionario"></variable>
+            <variable category="&ns_flows;" trait="textcontent" varName="FuncaoFuncionario"></variable>
+            <variable category="&ns_imrep;" trait="fileref" varName="FotoFuncionario"></variable>
+        </variables>
+        <v:sampleDataSets  xmlns:v="&ns_vars;" xmlns="&ns_custom;">
+            <v:sampleDataSet dataSetName="01 - Beatriz Nogueira da Conceição">
+                <NomeFuncionario><p>Beatriz Nogueira da Conceição</p></NomeFuncionario>
+                <FuncaoFuncionario><p>Cozinheira</p></FuncaoFuncionario>
+                <FotoFuncionario>D:\Crachas\SETOR TESTE-20261020T162517Z-1-001\SETOR TESTE\BEATRIZ  NOGUEIRA DA CONCEICAO -  Cozinheira.jpg</FotoFuncionario>
+            </v:sampleDataSet>
+            <v:sampleDataSet dataSetName="02 - Carlos Eduardo Teixeira">
+                <NomeFuncionario><p>Carlos Eduardo Teixeira</p></NomeFuncionario>
+                <FuncaoFuncionario><p>Cuidador Noturno</p></FuncaoFuncionario>
+                <FotoFuncionario>D:\Crachas\SETOR TESTE-20261020T162517Z-1-001\SETOR TESTE\CARLOS EDUARDO TEIXEIRA - Cuidador.jpg</FotoFuncionario>
+            </v:sampleDataSet>
+        </v:sampleDataSets>
+    </variableSet>
+</variableSets>
+</svg>
