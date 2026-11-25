@@ -1,141 +1,429 @@
-import { Button, VerticalBox, HorizontalBox, Palette } from "std-widgets.slint";
+import { Palette } from "std-widgets.slint";
+import {
+    AuditIssueItem, GridCellItem, GridRowItem, ImportColumnItem, ImportPreviewRowItem,
+    PhotoAssetItem, PhotoCandidateItem, PhotoCellItem, ProjectSummaryItem,
+    TemplateVarItem, ThemeTokens, VariableItem
+} from "theme/tokens.slint";
+import { Sidebar } from "components/sidebar.slint";
+import { Toolbar } from "components/toolbar.slint";
+import { StatusBar } from "components/status_bar.slint";
+import { ConfirmDialog } from "components/confirm_dialog.slint";
+import { ProjectsView } from "views/projects_view.slint";
+import { DataGridView } from "views/data_grid_view.slint";
+import { PhotosView } from "views/photos_view.slint";
+import { XmlExportView } from "views/xml_export_view.slint";
+import { SettingsView } from "views/settings_view.slint";
 
-export { Palette }
+export {
+    ProjectSummaryItem, VariableItem, GridCellItem, GridRowItem, ImportColumnItem,
+    ImportPreviewRowItem, PhotoCellItem, PhotoCandidateItem, PhotoAssetItem,
+    AuditIssueItem, TemplateVarItem, ThemeTokens, Palette
+}
 
 export component AppWindow inherits Window {
     title: "AI Variable Manager";
+    preferred-width: 1240px;
+    preferred-height: 780px;
     min-width: 960px;
-    min-height: 640px;
-    preferred-width: 1120px;
-    preferred-height: 720px;
-    background: Palette.background;
+    min-height: 620px;
+    background: ThemeTokens.surface-bg;
 
-    in-out property <bool> dark-mode: Palette.color-scheme == ColorScheme.dark;
-    in-out property <string> active-tab: "projetos";
-    in-out property <string> status-text: "Banco SQLite local conectado (100% offline)";
+    // Navigation & global state
+    in-out property <int> active-tab: 0;
+    in-out property <int> theme-mode-index: 0; // 0 = Sistema, 1 = Claro, 2 = Escuro
+    in property <string> view-title: "Projetos";
+    in property <string> view-subtitle: "";
+    in property <string> status-text: "Pronto";
+    in property <string> storage-hint: "SQLite local";
+    in property <bool> is-busy: false;
 
-    callback toggle-theme-requested();
+    // Global banner notification
+    in property <string> banner-text: "";
+    in property <int> banner-kind: 0; // 0=none, 1=ok, 2=warn, 3=error
 
-    VerticalBox {
-        padding: 20px;
-        spacing: 16px;
+    // Confirmation dialog
+    in-out property <bool> confirm-open: false;
+    in property <string> confirm-title: "";
+    in property <string> confirm-message: "";
+    in property <string> confirm-button-label: "Confirmar";
+    in property <bool> confirm-destructive: true;
 
-        // Barra superior persistente
-        Rectangle {
-            background: Palette.alternate-background;
-            border-color: Palette.border;
-            border-width: 1px;
-            border-radius: 6px;
-            height: 64px;
+    // Active project header
+    in property <bool> has-active-project: false;
+    in property <string> active-project-name: "";
+    in property <string> active-project-mode: "";
 
-            HorizontalBox {
-                padding-left: 16px;
-                padding-right: 16px;
-                spacing: 12px;
-                alignment: space-between;
+    // Projects tab
+    in property <[ProjectSummaryItem]> projects;
+    in-out property <string> new-project-name: "";
+    in-out property <int> new-project-mode: 0;
+    in-out property <string> rename-target-id: "";
+    in-out property <string> rename-draft-name: "";
 
-                VerticalBox {
-                    padding: 0px;
-                    spacing: 2px;
-                    alignment: center;
+    // Data Grid tab
+    in property <[VariableItem]> variables;
+    in property <[GridRowItem]> grid-rows;
+    in property <int> total-records: 0;
+    in property <int> current-page: 1;
+    in property <int> total-pages: 1;
+    in property <int> selected-records-count: 0;
+    in-out property <bool> show-columns-panel: false;
+    in-out property <bool> show-paste-panel: false;
+    in-out property <string> paste-draft: "";
+    in-out property <int> paste-start-row-1based: 1;
+    in-out property <int> paste-start-col-index: 0;
+    in-out property <string> new-var-name: "";
+    in-out property <int> new-var-kind: 0;
+    in-out property <bool> new-var-required: false;
+    in-out property <string> edit-var-id: "";
+    in-out property <string> edit-var-display: "";
+    in-out property <string> edit-var-xml: "";
+    in-out property <bool> show-import-wizard: false;
+    in property <string> import-file-path: "";
+    in property <[string]> import-sheets;
+    in-out property <int> import-sheet-index: 0;
+    in-out property <int> import-header-row-1based: 1;
+    in-out property <int> import-mode-index: 0;
+    in property <[ImportColumnItem]> import-columns;
+    in property <[ImportPreviewRowItem]> import-preview-rows;
+    in property <[string]> existing-var-names;
 
-                    Text {
-                        text: "AI Variable Manager";
-                        font-size: 18px;
-                        font-weight: 700;
-                        color: Palette.foreground;
-                    }
+    // Photos tab
+    in property <string> photo-root-dir: "";
+    in property <[string]> photo-column-names;
+    in-out property <int> selected-photo-col-index: 0;
+    in-out property <int> photo-filter-index: 0;
+    in property <int> photo-total-assets: 0;
+    in property <int> photo-matched-count: 0;
+    in property <int> photo-suggested-count: 0;
+    in property <int> photo-ambiguous-count: 0;
+    in property <int> photo-missing-count: 0;
+    in property <int> photo-unmatched-assets-count: 0;
+    in property <int> photo-duplicate-warnings-count: 0;
+    in property <int> photo-missing-on-disk-count: 0;
+    in property <[PhotoCellItem]> photo-cells;
+    in-out property <int> selected-photo-cell-index: -1;
+    in property <[PhotoCandidateItem]> active-photo-candidates;
+    in property <[PhotoAssetItem]> unmatched-photo-assets;
+    in-out property <string> pool-filter-text: "";
+    in-out property <bool> batch-overwrite-existing: false;
+    in-out property <int> selected-pool-asset-index: -1;
 
-                    Text {
-                        text: "Gerenciador de Dados Variáveis para Adobe Illustrator";
-                        font-size: 12px;
-                        color: Palette.foreground;
-                        opacity: 0.75;
-                    }
-                }
+    // XML & Export tab
+    in property <bool> is-template-mode: false;
+    in property <string> template-path-label: "";
+    in property <string> template-var-set-name: "";
+    in property <int> template-datasets-count: 0;
+    in property <bool> template-has-c2pa: false;
+    in property <[TemplateVarItem]> template-vars;
+    in property <[string]> project-var-options;
+    in property <bool> can-export: false;
+    in property <int> audit-blocking-count: 0;
+    in property <int> audit-warning-count: 0;
+    in property <[AuditIssueItem]> audit-issues;
+    in-out property <string> export-target-dir: "";
+    in property <string> last-export-summary: "";
+    in-out property <string> prefix-update-dir: "";
+    in property <string> xml-preview-text: "";
 
-                HorizontalBox {
-                    padding: 0px;
-                    spacing: 8px;
-                    alignment: center;
+    // Settings tab
+    in property <string> db-path-label: "";
+    in property <string> app-version-label: "0.1.0";
+    in property <int> thumbnail-cache-count: 0;
 
-                    Text {
-                        text: root.dark-mode ? "Tema: Escuro" : "Tema: Claro";
-                        color: Palette.foreground;
-                        vertical-alignment: center;
-                    }
+    // Global callbacks
+    callback tab-selected(int);
+    callback theme-changed(int);
+    callback dismiss-banner();
+    callback dialog-confirmed();
+    callback dialog-cancelled();
 
-                    Button {
-                        text: root.dark-mode ? "Mudar para Claro" : "Mudar para Escuro";
-                        clicked => {
-                            root.toggle-theme-requested();
-                        }
-                    }
-                }
-            }
+    // Projects callbacks
+    callback create-project(string, int);
+    callback open-project(string);
+    callback start-rename-project(string, string);
+    callback commit-rename-project(string, string);
+    callback cancel-rename-project();
+    callback request-delete-project(string, string);
+
+    // Data Grid callbacks
+    callback add-record();
+    callback toggle-row-selection(string);
+    callback move-record-up(string);
+    callback move-record-down(string);
+    callback request-delete-selected-records();
+    callback dataset-name-edited(string, string);
+    callback cell-edited(string, string, string);
+    callback refresh-diagnostics();
+    callback pick-cell-photo(string, string);
+    callback page-prev();
+    callback page-next();
+    callback paste-os-clipboard(int, int);
+    callback paste-manual-block(int, int, string);
+    callback create-variable(string, int, bool);
+    callback move-variable(string, int);
+    callback toggle-variable-required(string, bool);
+    callback toggle-variable-kind(string, bool);
+    callback start-rename-variable(string, string, string);
+    callback commit-rename-variable(string, string, string);
+    callback cancel-rename-variable();
+    callback duplicate-variable(string);
+    callback request-delete-variable(string, string);
+    callback open-import-file();
+    callback import-sheet-changed(int);
+    callback import-header-row-changed(int);
+    callback import-column-target-changed(int, int);
+    callback import-column-new-name-changed(int, string);
+    callback import-column-existing-changed(int, int);
+    callback commit-import();
+    callback close-import-wizard();
+
+    // Photos callbacks
+    callback pick-photo-folder();
+    callback rescan-photo-folder();
+    callback run-auto-match();
+    callback photo-filter-changed(int);
+    callback photo-column-changed(int);
+    callback select-photo-cell(int);
+    callback toggle-batch-cell(int);
+    callback pick-manual-photo(int);
+    callback unlink-photo(int);
+    callback accept-candidate(int, string);
+    callback request-cell-thumb(int);
+    callback request-candidate-thumb(int);
+    callback request-asset-thumb(int);
+    callback select-pool-asset(int);
+    callback link-selected-pool-asset();
+    callback batch-link-selected-to-pool();
+    callback pool-filter-changed(string);
+
+    // XML & Export callbacks
+    callback switch-project-mode(int);
+    callback pick-and-bind-xml-template();
+    callback template-mapping-changed(string, int);
+    callback run-audit();
+    callback click-audit-issue(string, string, string);
+    callback pick-export-dir();
+    callback export-package();
+    callback refresh-xml-preview();
+    callback pick-prefix-update-dir();
+    callback run-prefix-update();
+
+    // Settings callbacks
+    callback clear-thumbnail-cache();
+
+    HorizontalLayout {
+        Sidebar {
+            active-tab: root.active-tab;
+            has-active-project: root.has-active-project;
+            active-project-name: root.active-project-name;
+            active-project-mode: root.active-project-mode;
+            record-count: root.total-records;
+            missing-photos-count: root.photo-missing-count + root.photo-ambiguous-count;
+            blocking-errors-count: root.audit-blocking-count;
+            tab-selected(tab) => { root.tab-selected(tab); }
         }
 
-        // Navegação pt-BR (shell M1 para vistas M2-M5)
-        HorizontalBox {
-            padding: 0px;
-            spacing: 8px;
+        VerticalLayout {
+            horizontal-stretch: 1;
 
-            Button {
-                text: "Projetos";
-                primary: root.active-tab == "projetos";
-                clicked => { root.active-tab = "projetos"; }
+            Toolbar {
+                view-title: root.view-title;
+                view-subtitle: root.view-subtitle;
+                theme-mode-index <=> root.theme-mode-index;
+                banner-text: root.banner-text;
+                banner-kind: root.banner-kind;
+                theme-changed(m) => { root.theme-changed(m); }
+                dismiss-banner => { root.dismiss-banner(); }
             }
-            Button {
-                text: "Dados";
-                primary: root.active-tab == "dados";
-                clicked => { root.active-tab = "dados"; }
-            }
-            Button {
-                text: "Fotografias";
-                primary: root.active-tab == "fotos";
-                clicked => { root.active-tab = "fotos"; }
-            }
-            Button {
-                text: "XML & Exportação";
-                primary: root.active-tab == "xml";
-                clicked => { root.active-tab = "xml"; }
-            }
-            Button {
-                text: "Configurações";
-                primary: root.active-tab == "config";
-                clicked => { root.active-tab = "config"; }
-            }
-        }
 
-        // Área principal placeholder M1
-        Rectangle {
-            vertical-stretch: 1;
-            background: Palette.alternate-background;
-            border-color: Palette.border;
-            border-width: 1px;
-            border-radius: 6px;
+            Rectangle {
+                vertical-stretch: 1;
+                min-height: 0px;
+                clip: true;
 
-            VerticalBox {
-                padding: 24px;
-                spacing: 12px;
-                alignment: center;
-
-                Text {
-                    text: "Shell Fluent M1 — Aba ativa: " + root.active-tab;
-                    font-size: 16px;
-                    font-weight: 600;
-                    color: Palette.foreground;
-                    horizontal-alignment: center;
+                if root.active-tab == 0: ProjectsView {
+                    width: 100%;
+                    height: 100%;
+                    projects: root.projects;
+                    new-project-name <=> root.new-project-name;
+                    new-project-mode <=> root.new-project-mode;
+                    rename-target-id <=> root.rename-target-id;
+                    rename-draft-name <=> root.rename-draft-name;
+                    create-project(n, m) => { root.create-project(n, m); }
+                    open-project(id) => { root.open-project(id); }
+                    start-rename-project(id, name) => { root.start-rename-project(id, name); }
+                    commit-rename-project(id, name) => { root.commit-rename-project(id, name); }
+                    cancel-rename-project => { root.cancel-rename-project(); }
+                    request-delete-project(id, name) => { root.request-delete-project(id, name); }
                 }
 
-                Text {
-                    text: root.status-text;
-                    font-size: 13px;
-                    color: Palette.foreground;
-                    opacity: 0.85;
-                    horizontal-alignment: center;
+                if root.active-tab == 1: DataGridView {
+                    width: 100%;
+                    height: 100%;
+                    has-active-project: root.has-active-project;
+                    variables: root.variables;
+                    rows: root.grid-rows;
+                    total-records: root.total-records;
+                    current-page: root.current-page;
+                    total-pages: root.total-pages;
+                    selected-count: root.selected-records-count;
+                    show-columns-panel <=> root.show-columns-panel;
+                    show-paste-panel <=> root.show-paste-panel;
+                    paste-draft <=> root.paste-draft;
+                    paste-start-row-1based <=> root.paste-start-row-1based;
+                    paste-start-col-index <=> root.paste-start-col-index;
+                    new-var-name <=> root.new-var-name;
+                    new-var-kind <=> root.new-var-kind;
+                    new-var-required <=> root.new-var-required;
+                    edit-var-id <=> root.edit-var-id;
+                    edit-var-display <=> root.edit-var-display;
+                    edit-var-xml <=> root.edit-var-xml;
+                    show-import-wizard <=> root.show-import-wizard;
+                    import-file-path: root.import-file-path;
+                    import-sheets: root.import-sheets;
+                    import-sheet-index <=> root.import-sheet-index;
+                    import-header-row-1based <=> root.import-header-row-1based;
+                    import-mode-index <=> root.import-mode-index;
+                    import-columns: root.import-columns;
+                    import-preview-rows: root.import-preview-rows;
+                    existing-var-names: root.existing-var-names;
+
+                    add-record => { root.add-record(); }
+                    toggle-row-selection(id) => { root.toggle-row-selection(id); }
+                    move-record-up(id) => { root.move-record-up(id); }
+                    move-record-down(id) => { root.move-record-down(id); }
+                    request-delete-selected-records => { root.request-delete-selected-records(); }
+                    dataset-name-edited(id, v) => { root.dataset-name-edited(id, v); }
+                    cell-edited(rid, vid, v) => { root.cell-edited(rid, vid, v); }
+                    refresh-diagnostics => { root.refresh-diagnostics(); }
+                    pick-cell-photo(rid, vid) => { root.pick-cell-photo(rid, vid); }
+                    page-prev => { root.page-prev(); }
+                    page-next => { root.page-next(); }
+                    paste-os-clipboard(r, c) => { root.paste-os-clipboard(r, c); }
+                    paste-manual-block(r, c, txt) => { root.paste-manual-block(r, c, txt); }
+                    create-variable(n, k, req) => { root.create-variable(n, k, req); }
+                    move-variable(id, delta) => { root.move-variable(id, delta); }
+                    toggle-variable-required(id, req) => { root.toggle-variable-required(id, req); }
+                    toggle-variable-kind(id, is-p) => { root.toggle-variable-kind(id, is-p); }
+                    start-rename-variable(id, d, x) => { root.start-rename-variable(id, d, x); }
+                    commit-rename-variable(id, d, x) => { root.commit-rename-variable(id, d, x); }
+                    cancel-rename-variable => { root.cancel-rename-variable(); }
+                    duplicate-variable(id) => { root.duplicate-variable(id); }
+                    request-delete-variable(id, name) => { root.request-delete-variable(id, name); }
+                    open-import-file => { root.open-import-file(); }
+                    import-sheet-changed(i) => { root.import-sheet-changed(i); }
+                    import-header-row-changed(r) => { root.import-header-row-changed(r); }
+                    import-column-target-changed(c, t) => { root.import-column-target-changed(c, t); }
+                    import-column-new-name-changed(c, s) => { root.import-column-new-name-changed(c, s); }
+                    import-column-existing-changed(c, e) => { root.import-column-existing-changed(c, e); }
+                    commit-import => { root.commit-import(); }
+                    close-import-wizard => { root.close-import-wizard(); }
+                }
+
+                if root.active-tab == 2: PhotosView {
+                    width: 100%;
+                    height: 100%;
+                    photo-root-dir: root.photo-root-dir;
+                    photo-column-names: root.photo-column-names;
+                    selected-photo-col-index <=> root.selected-photo-col-index;
+                    filter-index <=> root.photo-filter-index;
+                    total-records: root.total-records;
+                    total-assets: root.photo-total-assets;
+                    matched-count: root.photo-matched-count;
+                    suggested-count: root.photo-suggested-count;
+                    ambiguous-count: root.photo-ambiguous-count;
+                    missing-count: root.photo-missing-count;
+                    unmatched-assets-count: root.photo-unmatched-assets-count;
+                    duplicate-warnings-count: root.photo-duplicate-warnings-count;
+                    missing-on-disk-count: root.photo-missing-on-disk-count;
+                    photo-cells: root.photo-cells;
+                    selected-cell-index <=> root.selected-photo-cell-index;
+                    active-candidates: root.active-photo-candidates;
+                    unmatched-assets: root.unmatched-photo-assets;
+                    pool-filter-text <=> root.pool-filter-text;
+                    batch-overwrite-existing <=> root.batch-overwrite-existing;
+                    selected-pool-asset-index <=> root.selected-pool-asset-index;
+
+                    pick-photo-folder => { root.pick-photo-folder(); }
+                    rescan-photo-folder => { root.rescan-photo-folder(); }
+                    run-auto-match => { root.run-auto-match(); }
+                    filter-changed(i) => { root.photo-filter-changed(i); }
+                    photo-column-changed(i) => { root.photo-column-changed(i); }
+                    select-photo-cell(i) => { root.select-photo-cell(i); }
+                    toggle-batch-cell(i) => { root.toggle-batch-cell(i); }
+                    pick-manual-photo(i) => { root.pick-manual-photo(i); }
+                    unlink-photo(i) => { root.unlink-photo(i); }
+                    accept-candidate(i, aid) => { root.accept-candidate(i, aid); }
+                    request-cell-thumb(i) => { root.request-cell-thumb(i); }
+                    request-candidate-thumb(i) => { root.request-candidate-thumb(i); }
+                    request-asset-thumb(i) => { root.request-asset-thumb(i); }
+                    select-pool-asset(i) => { root.select-pool-asset(i); }
+                    link-selected-pool-asset => { root.link-selected-pool-asset(); }
+                    batch-link-selected-to-pool => { root.batch-link-selected-to-pool(); }
+                    pool-filter-changed(t) => { root.pool-filter-changed(t); }
+                }
+
+                if root.active-tab == 3: XmlExportView {
+                    width: 100%;
+                    height: 100%;
+                    is-template-mode: root.is-template-mode;
+                    template-path-label: root.template-path-label;
+                    template-var-set-name: root.template-var-set-name;
+                    template-datasets-count: root.template-datasets-count;
+                    template-has-c2pa: root.template-has-c2pa;
+                    template-vars: root.template-vars;
+                    project-var-options: root.project-var-options;
+                    can-export: root.can-export;
+                    blocking-count: root.audit-blocking-count;
+                    warning-count: root.audit-warning-count;
+                    audit-issues: root.audit-issues;
+                    export-target-dir <=> root.export-target-dir;
+                    last-export-summary: root.last-export-summary;
+                    prefix-update-dir <=> root.prefix-update-dir;
+                    xml-preview-text: root.xml-preview-text;
+
+                    switch-project-mode(m) => { root.switch-project-mode(m); }
+                    pick-and-bind-xml-template => { root.pick-and-bind-xml-template(); }
+                    template-mapping-changed(tv, i) => { root.template-mapping-changed(tv, i); }
+                    run-audit => { root.run-audit(); }
+                    click-audit-issue(k, r, v) => { root.click-audit-issue(k, r, v); }
+                    pick-export-dir => { root.pick-export-dir(); }
+                    export-package => { root.export-package(); }
+                    refresh-xml-preview => { root.refresh-xml-preview(); }
+                    pick-prefix-update-dir => { root.pick-prefix-update-dir(); }
+                    run-prefix-update => { root.run-prefix-update(); }
+                }
+
+                if root.active-tab == 4: SettingsView {
+                    width: 100%;
+                    height: 100%;
+                    theme-mode-index <=> root.theme-mode-index;
+                    db-path-label: root.db-path-label;
+                    app-version-label: root.app-version-label;
+                    thumbnail-cache-count: root.thumbnail-cache-count;
+                    theme-changed(m) => { root.theme-changed(m); }
+                    clear-thumbnail-cache => { root.clear-thumbnail-cache(); }
                 }
             }
+
+            StatusBar {
+                status-text: root.status-text;
+                storage-hint: root.storage-hint;
+                is-busy: root.is-busy;
+            }
         }
+    }
+
+    ConfirmDialog {
+        width: 100%;
+        height: 100%;
+        open: root.confirm-open;
+        title: root.confirm-title;
+        message: root.confirm-message;
+        confirm-label: root.confirm-button-label;
+        is-destructive: root.confirm-destructive;
+        confirmed => { root.dialog-confirmed(); }
+        cancelled => { root.dialog-cancelled(); }
     }
 }

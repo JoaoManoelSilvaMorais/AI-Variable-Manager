@@ -1,0 +1,255 @@
+import { Button, ComboBox, LineEdit, ListView } from "std-widgets.slint";
+import { ProjectSummaryItem, ThemeTokens } from "../theme/tokens.slint";
+
+export component ProjectsView inherits Rectangle {
+    in property <[ProjectSummaryItem]> projects;
+    in-out property <string> new-project-name: "";
+    in-out property <int> new-project-mode: 0; // 0 = Direto, 1 = XML com Modelo
+    in-out property <string> rename-target-id: "";
+    in-out property <string> rename-draft-name: "";
+
+    callback create-project(string, int);
+    callback open-project(string);
+    callback start-rename-project(string, string);
+    callback commit-rename-project(string, string);
+    callback cancel-rename-project();
+    callback request-delete-project(string, string);
+
+    background: ThemeTokens.surface-bg;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 16px;
+
+        // Card: New project
+        Rectangle {
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+
+            VerticalLayout {
+                padding: 16px;
+                spacing: 12px;
+
+                Text {
+                    text: "Novo Projeto";
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: ThemeTokens.text-primary;
+                }
+
+                HorizontalLayout {
+                    spacing: 12px;
+
+                    VerticalLayout {
+                        horizontal-stretch: 2;
+                        spacing: 6px;
+                        Text {
+                            text: "Nome do projeto";
+                            font-size: 12px;
+                            font-weight: 600;
+                            color: ThemeTokens.text-secondary;
+                        }
+                        LineEdit {
+                            text <=> root.new-project-name;
+                            placeholder-text: "Ex.: Crachás SECOM 2026";
+                            accepted => {
+                                root.create-project(root.new-project-name, root.new-project-mode);
+                            }
+                        }
+                    }
+
+                    VerticalLayout {
+                        horizontal-stretch: 2;
+                        spacing: 6px;
+                        Text {
+                            text: "Modo de operação";
+                            font-size: 12px;
+                            font-weight: 600;
+                            color: ThemeTokens.text-secondary;
+                        }
+                        ComboBox {
+                            model: [
+                                "Modo Direto (sem XML-base)",
+                                "Modo XML com Modelo do Illustrator"
+                            ];
+                            current-index <=> root.new-project-mode;
+                        }
+                    }
+
+                    VerticalLayout {
+                        alignment: end;
+                        Button {
+                            text: "Criar Projeto";
+                            primary: true;
+                            clicked => {
+                                root.create-project(root.new-project-name, root.new-project-mode);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Saved projects list header
+        HorizontalLayout {
+            spacing: 10px;
+            Text {
+                text: "Projetos Salvos (\{root.projects.length})";
+                font-size: 15px;
+                font-weight: 700;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                color: ThemeTokens.text-primary;
+            }
+        }
+
+        if root.projects.length == 0: Rectangle {
+            vertical-stretch: 1;
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 8px;
+                padding: 32px;
+                Text {
+                    text: "Nenhum projeto criado ainda.";
+                    font-size: 15px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    color: ThemeTokens.text-primary;
+                }
+                Text {
+                    text: "Informe um nome acima, escolha entre Modo Direto ou Modo XML com Modelo do Illustrator e clique em 'Criar Projeto'.";
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                    color: ThemeTokens.text-secondary;
+                }
+            }
+        }
+
+        if root.projects.length > 0: Rectangle {
+            vertical-stretch: 1;
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+
+            ListView {
+                for proj in root.projects: Rectangle {
+                    height: 82px;
+                    background: proj.is-active ? ThemeTokens.selected-row-bg : transparent;
+
+                    Rectangle {
+                        y: parent.height - 1px;
+                        width: 100%;
+                        height: 1px;
+                        background: ThemeTokens.subtle-border;
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 16px;
+                        padding-right: 16px;
+                        padding-top: 10px;
+                        padding-bottom: 10px;
+                        spacing: 12px;
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            spacing: 4px;
+
+                            if root.rename-target-id != proj.id: HorizontalLayout {
+                                alignment: start;
+                                spacing: 8px;
+                                Text {
+                                    text: proj.name;
+                                    font-size: 14px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 0;
+                                    color: ThemeTokens.text-primary;
+                                }
+                                if proj.is-active: VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 0;
+                                    Rectangle {
+                                        height: 22px;
+                                        border-radius: 4px;
+                                        background: ThemeTokens.ok-bg;
+                                        HorizontalLayout {
+                                            padding-left: 8px;
+                                            padding-right: 8px;
+                                            Text {
+                                                text: "Ativo";
+                                                font-size: 11px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                                color: ThemeTokens.ok-fg;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if root.rename-target-id == proj.id: HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    width: 260px;
+                                    text <=> root.rename-draft-name;
+                                    accepted => {
+                                        root.commit-rename-project(proj.id, root.rename-draft-name);
+                                    }
+                                }
+                                Button {
+                                    text: "Salvar";
+                                    primary: true;
+                                    clicked => {
+                                        root.commit-rename-project(proj.id, root.rename-draft-name);
+                                    }
+                                }
+                                Button {
+                                    text: "Cancelar";
+                                    clicked => { root.cancel-rename-project(); }
+                                }
+                            }
+
+                            Text {
+                                text: "\{proj.mode-label}  •  \{proj.record-count} registro(s)  •  \{proj.variable-count} coluna(s)";
+                                font-size: 12px;
+                                overflow: elide;
+                                color: ThemeTokens.text-secondary;
+                            }
+                        }
+
+                        VerticalLayout {
+                            alignment: center;
+                            HorizontalLayout {
+                                spacing: 8px;
+
+                                Button {
+                                    text: proj.is-active ? "Reabrir" : "Abrir";
+                                    primary: !proj.is-active;
+                                    clicked => { root.open-project(proj.id); }
+                                }
+                                Button {
+                                    text: "Renomear";
+                                    clicked => { root.start-rename-project(proj.id, proj.name); }
+                                }
+                                Button {
+                                    text: "Excluir";
+                                    clicked => { root.request-delete-project(proj.id, proj.name); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

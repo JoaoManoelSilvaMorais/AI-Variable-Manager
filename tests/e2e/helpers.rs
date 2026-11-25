@@ -657,14 +657,18 @@ fn validate_illustrator_xml_internal(
                             let trimmed = field.direct_text.trim();
                             if !trimmed.is_empty() {
                                 assert!(
-                                    !trimmed.contains('\\'),
-                                    "LinkedFile <{}> path must use forward slashes: {trimmed}",
+                                    !trimmed.starts_with("file://"),
+                                    "LinkedFile <{}> path must be native Windows path, not file:// URI: {trimmed}",
                                     field.tag_name
                                 );
                                 assert!(
-                                    trimmed.starts_with("imagens/")
-                                        || trimmed.starts_with("file:///"),
-                                    "LinkedFile <{}> path must be imagens/... or file:///...: {trimmed}",
+                                    !trimmed.contains('/'),
+                                    "LinkedFile <{}> path must use Windows backslashes: {trimmed}",
+                                    field.tag_name
+                                );
+                                assert!(
+                                    trimmed.contains(r"\imagens\"),
+                                    "LinkedFile <{}> path must be an absolute path ending in \\imagens\\...: {trimmed}",
                                     field.tag_name
                                 );
                             }

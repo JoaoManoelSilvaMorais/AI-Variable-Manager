@@ -1,0 +1,219 @@
+import { Palette } from "std-widgets.slint";
+import { ThemeTokens } from "../theme/tokens.slint";
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <string> badge-text;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    in property <bool> has-alert: false;
+    callback clicked;
+
+    height: 40px;
+    border-radius: 6px;
+    border-width: active ? 1px : 0px;
+    border-color: active ? ThemeTokens.subtle-border : transparent;
+    background: !enabled ? transparent :
+        active ? ThemeTokens.nav-active-bg :
+        touch.has-hover ? ThemeTokens.nav-hover-bg : transparent;
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 10px;
+        spacing: 10px;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 3px;
+                height: 18px;
+                border-radius: 2px;
+                background: active ? Palette.accent-background : transparent;
+            }
+        }
+
+        Text {
+            text: root.label;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            font-size: 13px;
+            font-weight: active ? 700 : 500;
+            color: !enabled ? ThemeTokens.text-disabled : ThemeTokens.text-primary;
+        }
+
+        if badge-text != "": VerticalLayout {
+            alignment: center;
+            Rectangle {
+                min-width: 24px;
+                height: 20px;
+                border-radius: 10px;
+                background: has-alert ? ThemeTokens.err-bg : ThemeTokens.muted-bg;
+                border-width: 1px;
+                border-color: ThemeTokens.subtle-border;
+
+                HorizontalLayout {
+                    padding-left: 7px;
+                    padding-right: 7px;
+                    Text {
+                        text: root.badge-text;
+                        font-size: 11px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                        color: has-alert ? ThemeTokens.err-fg : ThemeTokens.text-primary;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component Sidebar inherits Rectangle {
+    in property <int> active-tab: 0;
+    in property <bool> has-active-project: false;
+    in property <string> active-project-name: "";
+    in property <string> active-project-mode: "";
+    in property <int> record-count: 0;
+    in property <int> missing-photos-count: 0;
+    in property <int> blocking-errors-count: 0;
+    callback tab-selected(int);
+
+    width: 236px;
+    background: ThemeTokens.sidebar-bg;
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: 100%;
+        background: ThemeTokens.subtle-border;
+    }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        // Branding header
+        Rectangle {
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 3px;
+
+                Text {
+                    text: "AI Variable Manager";
+                    font-size: 14px;
+                    font-weight: 700;
+                    color: ThemeTokens.text-primary;
+                }
+                Text {
+                    text: "Illustrator Datasets • Offline";
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: ThemeTokens.info-fg;
+                }
+            }
+        }
+
+        if has-active-project: Rectangle {
+            border-radius: 8px;
+            background: ThemeTokens.info-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+
+            VerticalLayout {
+                padding: 10px;
+                spacing: 3px;
+                Text {
+                    text: "PROJETO ATIVO";
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: ThemeTokens.info-fg;
+                }
+                Text {
+                    text: root.active-project-name;
+                    font-size: 13px;
+                    font-weight: 700;
+                    overflow: elide;
+                    color: ThemeTokens.text-primary;
+                }
+                Text {
+                    text: root.active-project-mode;
+                    font-size: 11px;
+                    overflow: elide;
+                    color: ThemeTokens.text-secondary;
+                }
+            }
+        }
+
+        Rectangle { height: 2px; }
+
+        NavItem {
+            label: "Projetos";
+            active: root.active-tab == 0;
+            clicked => { root.tab-selected(0); }
+        }
+        NavItem {
+            label: "Dados e Colunas";
+            badge-text: has-active-project ? "\{root.record-count}" : "";
+            active: root.active-tab == 1;
+            enabled: has-active-project;
+            clicked => { root.tab-selected(1); }
+        }
+        NavItem {
+            label: "Fotos e Vínculos";
+            badge-text: has-active-project && root.missing-photos-count > 0 ? "\{root.missing-photos-count}" : "";
+            has-alert: root.missing-photos-count > 0;
+            active: root.active-tab == 2;
+            enabled: has-active-project;
+            clicked => { root.tab-selected(2); }
+        }
+        NavItem {
+            label: "XML e Exportação";
+            badge-text: has-active-project && root.blocking-errors-count > 0 ? "\{root.blocking-errors-count}" : "";
+            has-alert: root.blocking-errors-count > 0;
+            active: root.active-tab == 3;
+            enabled: has-active-project;
+            clicked => { root.tab-selected(3); }
+        }
+        NavItem {
+            label: "Configurações";
+            active: root.active-tab == 4;
+            clicked => { root.tab-selected(4); }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        Rectangle {
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 4px;
+                Text {
+                    text: "100% Local • Somente leitura";
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: ThemeTokens.ok-fg;
+                }
+                Text {
+                    text: "Planilhas, fotos e XMLs de origem nunca são alterados.";
+                    font-size: 11px;
+                    wrap: word-wrap;
+                    color: ThemeTokens.text-secondary;
+                }
+            }
+        }
+    }
+}

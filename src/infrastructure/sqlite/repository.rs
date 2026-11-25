@@ -280,7 +280,7 @@ impl ProjectRepository for SqliteProjectRepository {
     fn create_project(&self, name: &str, mode: ProjectMode) -> AppResult<Project> {
         let id = Uuid::new_v4().to_string();
         let now = utc_now_rfc3339();
-        let path_strategy = PathStrategy::RelativeToXml;
+        let path_strategy = PathStrategy::AbsolutePath;
 
         self.conn_mgr.with_immediate_tx(|tx| {
             tx.execute(

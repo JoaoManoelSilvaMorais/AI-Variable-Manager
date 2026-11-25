@@ -67,8 +67,6 @@ pub struct XmlExportSpec {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrefixUpdateReport {
     pub export_dir: PathBuf,
-    pub previous_strategy: PathStrategy,
-    pub new_strategy: PathStrategy,
     pub updated_references: usize,
     pub verified_assets: usize,
     pub missing_assets: Vec<PathBuf>,

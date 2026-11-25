@@ -1,0 +1,365 @@
+import { Button, ComboBox, LineEdit, ListView, ScrollView, TextEdit } from "std-widgets.slint";
+import { AuditIssueItem, TemplateVarItem, ThemeTokens } from "../theme/tokens.slint";
+
+export component XmlExportView inherits Rectangle {
+    in property <bool> is-template-mode: false;
+    in property <string> template-path-label: "";
+    in property <string> template-var-set-name: "";
+    in property <int> template-datasets-count: 0;
+    in property <bool> template-has-c2pa: false;
+    in property <[TemplateVarItem]> template-vars;
+    in property <[string]> project-var-options: [];
+
+    in property <bool> can-export: false;
+    in property <int> blocking-count: 0;
+    in property <int> warning-count: 0;
+    in property <[AuditIssueItem]> audit-issues;
+
+    in-out property <string> export-target-dir: "";
+    in property <string> last-export-summary: "";
+    in-out property <string> prefix-update-dir: "";
+    in property <string> xml-preview-text: "";
+
+    callback switch-project-mode(int);
+    callback pick-and-bind-xml-template();
+    callback template-mapping-changed(string, int);
+    callback run-audit();
+    callback click-audit-issue(string, string, string);
+    callback pick-export-dir();
+    callback export-package();
+    callback refresh-xml-preview();
+    callback pick-prefix-update-dir();
+    callback run-prefix-update();
+
+    background: ThemeTokens.surface-bg;
+
+    ScrollView {
+        min-height: 0px;
+        VerticalLayout {
+            padding: 18px;
+            spacing: 14px;
+            alignment: start;
+
+            // Template & Path Strategy configuration
+            Rectangle {
+                border-radius: 8px;
+                background: ThemeTokens.card-bg;
+                border-width: 1px;
+                border-color: ThemeTokens.subtle-border;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 12px;
+
+                    Text {
+                        text: "Configuração do XML do Adobe Illustrator";
+                        font-size: 14px;
+                        font-weight: 700;
+                        color: ThemeTokens.text-primary;
+                    }
+
+                    VerticalLayout {
+                        spacing: 6px;
+                        Text { text: "Modo do Projeto"; font-size: 12px; font-weight: 600; color: ThemeTokens.text-secondary; }
+                        ComboBox {
+                            model: ["Modo Direto (gera estrutura XML padrão)", "Modo XML com Modelo do Illustrator"];
+                            current-index: root.is-template-mode ? 1 : 0;
+                            selected => { root.switch-project-mode(self.current-index); }
+                        }
+                        Text {
+                            text: "As fotografias vinculadas são sempre referenciadas pelo caminho absoluto nativo do Windows (<pasta_destino>\\imagens\\asset_XXX.ext).";
+                            font-size: 11px;
+                            wrap: word-wrap;
+                            color: ThemeTokens.text-secondary;
+                        }
+                    }
+
+                    if root.is-template-mode: VerticalLayout {
+                        spacing: 10px;
+                        HorizontalLayout {
+                            spacing: 10px;
+                            Button {
+                                text: "Selecionar XML-base do Illustrator...";
+                                primary: true;
+                                clicked => { root.pick-and-bind-xml-template(); }
+                            }
+                            Text {
+                                text: root.template-path-label != "" ? root.template-path-label : "Nenhum XML-base carregado ainda.";
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                overflow: elide;
+                                font-size: 12px;
+                                color: ThemeTokens.info-fg;
+                            }
+                        }
+
+                        if root.template-vars.length > 0: VerticalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: "VarSet: \{root.template-var-set-name}  •  Amostras originais: \{root.template-datasets-count}  •  C2PA preservado: \{root.template-has-c2pa ? "Sim" : "Não"}";
+                                font-size: 12px;
+                                color: ThemeTokens.text-secondary;
+                            }
+                            for tv in root.template-vars: HorizontalLayout {
+                                spacing: 10px;
+                                Text {
+                                    width: 180px;
+                                    text: tv.var-name;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                    color: ThemeTokens.text-primary;
+                                }
+                                Text {
+                                    width: 175px;
+                                    text: "\{tv.trait-label} (\{tv.wrapper-label})";
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                    color: tv.is-ignored ? ThemeTokens.warn-fg : ThemeTokens.info-fg;
+                                }
+                                if !tv.is-ignored: ComboBox {
+                                    horizontal-stretch: 1;
+                                    model: root.project-var-options;
+                                    current-index: tv.mapped-col-index;
+                                    selected => { root.template-mapping-changed(tv.var-name, self.current-index); }
+                                }
+                                if tv.is-ignored: Text {
+                                    horizontal-stretch: 1;
+                                    text: "Preservada no XML sem edição de células no MVP";
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                    color: ThemeTokens.warn-fg;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Pre-export audit
+            Rectangle {
+                border-radius: 8px;
+                background: ThemeTokens.card-bg;
+                border-width: 1px;
+                border-color: ThemeTokens.subtle-border;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        Text {
+                            text: "Auditoria Pré-Exportação";
+                            font-size: 14px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            color: ThemeTokens.text-primary;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                height: 28px;
+                                border-radius: 6px;
+                                background: root.blocking-count > 0 ? ThemeTokens.err-bg :
+                                    root.warning-count > 0 ? ThemeTokens.warn-bg : ThemeTokens.ok-bg;
+                                border-width: 1px;
+                                border-color: ThemeTokens.subtle-border;
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    Text {
+                                        text: root.blocking-count > 0 ? "Bloqueado (\{root.blocking-count} erro(s), \{root.warning-count} aviso(s))" :
+                                            root.warning-count > 0 ? "Pronto com \{root.warning-count} aviso(s)" : "100% Pronto para Exportação";
+                                        font-size: 12px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                        color: root.blocking-count > 0 ? ThemeTokens.err-fg :
+                                            root.warning-count > 0 ? ThemeTokens.warn-fg : ThemeTokens.ok-fg;
+                                    }
+                                }
+                            }
+                        }
+                        Button {
+                            text: "Executar Auditoria";
+                            clicked => { root.run-audit(); }
+                        }
+                    }
+
+                    if root.audit-issues.length > 0: ListView {
+                        height: min(210px, root.audit-issues.length * 58px + 6px);
+                        for issue in root.audit-issues: Rectangle {
+                            height: 56px;
+                            VerticalLayout {
+                                padding-bottom: 4px;
+                                Rectangle {
+                                    vertical-stretch: 1;
+                                    border-radius: 6px;
+                                    background: issue.severity-kind == 0 ? ThemeTokens.err-bg : ThemeTokens.warn-bg;
+                                    border-width: 1px;
+                                    border-color: ThemeTokens.subtle-border;
+                                    TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            root.click-audit-issue(issue.target-kind, issue.target-record-id, issue.target-var-id);
+                                        }
+                                    }
+                                    HorizontalLayout {
+                                        padding-left: 12px;
+                                        padding-right: 12px;
+                                        spacing: 10px;
+                                        Text {
+                                            width: 44px;
+                                            text: issue.code;
+                                            font-weight: 700;
+                                            font-size: 12px;
+                                            vertical-alignment: center;
+                                            color: issue.severity-kind == 0 ? ThemeTokens.err-fg : ThemeTokens.warn-fg;
+                                        }
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            alignment: center;
+                                            spacing: 2px;
+                                            Text {
+                                                text: issue.title;
+                                                font-size: 12px;
+                                                font-weight: 700;
+                                                overflow: elide;
+                                                color: ThemeTokens.text-primary;
+                                            }
+                                            Text {
+                                                text: issue.message;
+                                                font-size: 11px;
+                                                overflow: elide;
+                                                color: ThemeTokens.text-secondary;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Export execution card
+            Rectangle {
+                border-radius: 8px;
+                background: ThemeTokens.card-bg;
+                border-width: 1px;
+                border-color: ThemeTokens.subtle-border;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+
+                    Text {
+                        text: "Exportar Pacote Portátil do Illustrator";
+                        font-size: 14px;
+                        font-weight: 700;
+                        color: ThemeTokens.text-primary;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        LineEdit {
+                            horizontal-stretch: 1;
+                            text <=> root.export-target-dir;
+                            placeholder-text: "Pasta de destino onde serão salvos dados.xml, imagens/, manifest.json e relatorio.csv";
+                        }
+                        Button {
+                            text: "Escolher Pasta...";
+                            clicked => { root.pick-export-dir(); }
+                        }
+                        Button {
+                            text: "Exportar Pacote";
+                            primary: true;
+                            enabled: root.can-export && root.export-target-dir != "";
+                            clicked => { root.export-package(); }
+                        }
+                    }
+
+                    if root.last-export-summary != "": Text {
+                        text: root.last-export-summary;
+                        font-size: 12px;
+                        font-weight: 600;
+                        wrap: word-wrap;
+                        color: ThemeTokens.ok-fg;
+                    }
+                }
+            }
+
+            // Update moved package prefix tool
+            Rectangle {
+                border-radius: 8px;
+                background: ThemeTokens.card-bg;
+                border-width: 1px;
+                border-color: ThemeTokens.subtle-border;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+
+                    Text {
+                        text: "Atualizar Caminhos das Imagens em Pasta Movida";
+                        font-size: 14px;
+                        font-weight: 700;
+                        color: ThemeTokens.text-primary;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        LineEdit {
+                            horizontal-stretch: 1;
+                            text <=> root.prefix-update-dir;
+                            placeholder-text: "Pasta exportada já contendo dados.xml, imagens/ e manifest.json";
+                        }
+                        Button {
+                            text: "Selecionar...";
+                            clicked => { root.pick-prefix-update-dir(); }
+                        }
+                        Button {
+                            text: "Atualizar dados.xml";
+                            enabled: root.prefix-update-dir != "";
+                            clicked => { root.run-prefix-update(); }
+                        }
+                    }
+                }
+            }
+
+            // XML Preview card
+            Rectangle {
+                border-radius: 8px;
+                background: ThemeTokens.card-bg;
+                border-width: 1px;
+                border-color: ThemeTokens.subtle-border;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 8px;
+
+                    HorizontalLayout {
+                        Text {
+                            text: "Prévia do dados.xml (UTF-8 sem BOM, CRLF)";
+                            font-size: 14px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            color: ThemeTokens.text-primary;
+                        }
+                        Button {
+                            text: "Gerar / Atualizar Prévia XML";
+                            clicked => { root.refresh-xml-preview(); }
+                        }
+                    }
+
+                    TextEdit {
+                        height: 220px;
+                        read-only: true;
+                        text: root.xml-preview-text;
+                    }
+                }
+            }
+        }
+    }
+}

@@ -257,7 +257,7 @@ fn t1_f04_01_create_project_with_template_mode() {
     assert_eq!(parsed_uuid.get_version(), Some(uuid::Version::Random));
     assert_eq!(p.name, "Crachás SECOM");
     assert_eq!(p.mode, ProjectMode::WithTemplate);
-    assert_eq!(p.path_strategy, PathStrategy::RelativeToXml);
+    assert_eq!(p.path_strategy, PathStrategy::AbsolutePath);
 }
 
 #[test]
@@ -321,7 +321,7 @@ fn t1_f04_04_rename_and_update_project_settings() {
         .rename_project(&p.id, "SECOM 2026")
         .unwrap();
     let mut snap = env.services.project_service.open_project(&p.id).unwrap();
-    snap.project.path_strategy = PathStrategy::AbsoluteFileUri;
+    snap.project.path_strategy = PathStrategy::AbsolutePath;
     env.services
         .project_service
         .update_project_settings(&snap.project)
@@ -330,7 +330,7 @@ fn t1_f04_04_rename_and_update_project_settings() {
     let reopened = env.reopen();
     let after = reopened.project_service.open_project(&p.id).unwrap();
     assert_eq!(after.project.name, "SECOM 2026");
-    assert_eq!(after.project.path_strategy, PathStrategy::AbsoluteFileUri);
+    assert_eq!(after.project.path_strategy, PathStrategy::AbsolutePath);
 }
 
 #[test]
@@ -3377,17 +3377,17 @@ fn t1_f21_03_text_uses_p_wrapper_linked_file_uses_raw_no_p() {
     let xml = std::fs::read_to_string(out_dir.join("dados.xml")).unwrap();
     assert!(xml.contains("<Nome><p>Ana</p></Nome>"));
     assert!(xml.contains("<Funcao><p></p></Funcao>"));
-    assert!(xml.contains("<Foto>imagens/asset_001.jpg</Foto>"));
+    assert!(xml.contains(&format!("<Foto>{}\\imagens\\asset_001.jpg</Foto>", out_dir.display())));
     assert_illustrator_xml_valid(&xml, 1);
 }
 
 #[test]
-fn t1_f21_04_relative_to_xml_strategy_emits_forward_slashes() {
+fn t1_f21_04_exported_xml_emits_native_windows_absolute_path() {
     let env = TestEnv::new();
     let proj = env
         .services
         .project_service
-        .create_project("Relative Path", ProjectMode::WithoutTemplate)
+        .create_project("Native Path", ProjectMode::WithoutTemplate)
         .unwrap();
     let v_foto = env
         .services
@@ -3400,27 +3400,24 @@ fn t1_f21_04_relative_to_xml_strategy_emits_forward_slashes() {
         .link_manual(&proj.id, &recs[0].id, &v_foto.id, &fixture_path("images/joao_silva.jpg"))
         .unwrap();
 
-    let out_dir = env.path().join("out_rel");
+    let out_dir = env.path().join("out_abs");
     env.services
         .export_service
         .export_package(&proj.id, &out_dir, false)
         .unwrap();
     let xml = std::fs::read_to_string(out_dir.join("dados.xml")).unwrap();
-    assert!(xml.contains("<Foto>imagens/asset_001.jpg</Foto>"));
-    assert!(!xml.contains("imagens\\asset_001.jpg"));
+    let expected = format!("{}\\imagens\\asset_001.jpg", out_dir.display());
+    assert!(xml.contains(&format!("<Foto>{expected}</Foto>")));
+    assert!(!xml.contains("file://"));
 }
 
 #[test]
-fn t1_f21_05_absolute_file_uri_strategy_emits_valid_file_uri() {
+fn t1_f21_05_native_absolute_path_preserves_spaces_and_accents_without_percent_encoding() {
     let env = TestEnv::new();
     let proj = env
         .services
         .project_service
-        .create_project("Absolute URI", ProjectMode::WithoutTemplate)
-        .unwrap();
-    env.services
-        .project_service
-        .set_path_strategy(&proj.id, PathStrategy::AbsoluteFileUri)
+        .create_project("Native Path Accents", ProjectMode::WithoutTemplate)
         .unwrap();
     let v_foto = env
         .services
@@ -3433,18 +3430,19 @@ fn t1_f21_05_absolute_file_uri_strategy_emits_valid_file_uri() {
         .link_manual(&proj.id, &recs[0].id, &v_foto.id, &fixture_path("images/joao_silva.jpg"))
         .unwrap();
 
-    let out_dir = env.path().join("Exports").join("Lote 01");
+    let out_dir = env.path().join("Exports").join("crachás teste");
     env.services
         .export_service
         .export_package(&proj.id, &out_dir, false)
         .unwrap();
     let xml = std::fs::read_to_string(out_dir.join("dados.xml")).unwrap();
     let datasets = extract_xml_datasets(&xml);
-    let uri = datasets[0].1.get("Foto").unwrap();
-    assert!(uri.starts_with("file:///"));
-    assert!(uri.contains("Lote%2001"));
-    assert!(uri.ends_with("/imagens/asset_001.jpg"));
-    assert!(!uri.contains('\\'));
+    let path_val = datasets[0].1.get("Foto").unwrap();
+    assert!(!path_val.starts_with("file://"));
+    assert!(!path_val.contains("%20"));
+    assert!(!path_val.contains("%C3"));
+    assert!(path_val.contains(r"crachás teste\imagens\asset_001.jpg"));
+    assert!(!path_val.contains('/'));
     assert_illustrator_xml_valid(&xml, 1);
 }
 
@@ -3830,8 +3828,9 @@ fn t1_f23_03_shared_asset_deduplicated_in_imagens_and_manifest() {
     let xml = std::fs::read_to_string(out_dir.join("dados.xml")).unwrap();
     let datasets = extract_xml_datasets(&xml);
     assert_eq!(datasets.len(), 2);
-    assert_eq!(datasets[0].1.get("Foto").map(String::as_str), Some("imagens/asset_001.jpg"));
-    assert_eq!(datasets[1].1.get("Foto").map(String::as_str), Some("imagens/asset_001.jpg"));
+    let expected_img = format!("{}\\imagens\\asset_001.jpg", out_dir.display());
+    assert_eq!(datasets[0].1.get("Foto").map(String::as_str), Some(expected_img.as_str()));
+    assert_eq!(datasets[1].1.get("Foto").map(String::as_str), Some(expected_img.as_str()));
 
     let manifest = read_manifest_json(&out_dir);
     assert!(manifest.to_string().contains("asset_001.jpg"));
@@ -3915,13 +3914,9 @@ fn t1_f23_05_overwrite_confirmed_true_replaces_existing_cleanly() {
 // ============================================================================
 
 #[test]
-fn t1_f24_01_move_folder_and_update_absolute_file_uri_prefix() {
+fn t1_f24_01_move_folder_and_update_native_absolute_path_prefix() {
     let env = TestEnv::new();
     let (pid, _vn, v_foto, recs) = setup_photo_project(&env, "Mover Pacote", &["Pessoa 1"]);
-    env.services
-        .project_service
-        .set_path_strategy(&pid, PathStrategy::AbsoluteFileUri)
-        .unwrap();
     env.services
         .photo_service
         .link_manual(&pid, &recs[0].id, &v_foto.id, &fixture_path("images/joao_silva.jpg"))
@@ -3937,76 +3932,88 @@ fn t1_f24_01_move_folder_and_update_absolute_file_uri_prefix() {
 
     env.services
         .export_service
-        .update_exported_prefix(&dir_b, PathStrategy::AbsoluteFileUri)
+        .update_exported_prefix(&dir_b)
         .unwrap();
 
     let xml = std::fs::read_to_string(dir_b.join("dados.xml")).unwrap();
     let datasets = extract_xml_datasets(&xml);
-    let uri = datasets[0].1.get("Foto").unwrap();
-    assert!(uri.starts_with("file:///"));
-    assert!(uri.contains("dir_b"));
-    assert!(!uri.contains("dir_a"));
-    assert!(uri.ends_with("/imagens/asset_001.jpg"));
+    let path_val = datasets[0].1.get("Foto").unwrap();
+    assert!(!path_val.starts_with("file://"));
+    assert!(path_val.contains("dir_b"));
+    assert!(!path_val.contains("dir_a"));
+    assert!(path_val.ends_with(r"\imagens\asset_001.jpg"));
     assert_illustrator_xml_valid(&xml, 1);
 
     let manifest = read_manifest_json(&dir_b);
-    assert_eq!(manifest["path_strategy"].as_str(), Some("absolute_file_uri"));
+    assert_eq!(manifest["path_strategy"].as_str(), Some("absolute_path"));
     assert!(!manifest.to_string().contains("dir_a"));
 }
 
 #[test]
-fn t1_f24_02_switch_strategy_absolute_to_relative() {
+fn t1_f24_02_upgrades_legacy_file_uri_xml_to_native_windows_path() {
     let env = TestEnv::new();
-    let (pid, _vn, v_foto, recs) = setup_photo_project(&env, "Abs para Rel", &["Pessoa 1"]);
-    env.services
-        .project_service
-        .set_path_strategy(&pid, PathStrategy::AbsoluteFileUri)
-        .unwrap();
+    let (pid, _vn, v_foto, recs) = setup_photo_project(&env, "Upgrade Legacy URI", &["Pessoa 1"]);
     env.services
         .photo_service
         .link_manual(&pid, &recs[0].id, &v_foto.id, &fixture_path("images/joao_silva.jpg"))
         .unwrap();
 
-    let out_dir = env.path().join("switch_rel");
+    let out_dir = env.path().join("upgrade_uri");
     env.services
         .export_service
         .export_package(&pid, &out_dir, false)
         .unwrap();
+    // Simulate a legacy exported XML with file:/// URI
+    let orig_xml = std::fs::read_to_string(out_dir.join("dados.xml")).unwrap();
+    let legacy_xml = orig_xml.replace(
+        &format!("{}\\imagens\\asset_001.jpg", out_dir.display()),
+        "file:///D:/Antigo/crach%C3%A1s%20teste/imagens/asset_001.jpg",
+    );
+    std::fs::write(out_dir.join("dados.xml"), legacy_xml).unwrap();
+
     env.services
         .export_service
-        .update_exported_prefix(&out_dir, PathStrategy::RelativeToXml)
+        .update_exported_prefix(&out_dir)
         .unwrap();
 
     let xml = std::fs::read_to_string(out_dir.join("dados.xml")).unwrap();
-    assert!(xml.contains("<Foto>imagens/asset_001.jpg</Foto>"));
+    assert!(xml.contains(&format!("<Foto>{}\\imagens\\asset_001.jpg</Foto>", out_dir.display())));
+    assert!(!xml.contains("file://"));
     let manifest = read_manifest_json(&out_dir);
-    assert_eq!(manifest["path_strategy"].as_str(), Some("relative_to_xml"));
+    assert_eq!(manifest["path_strategy"].as_str(), Some("absolute_path"));
 }
 
 #[test]
-fn t1_f24_03_switch_strategy_relative_to_absolute() {
+fn t1_f24_03_upgrades_legacy_relative_xml_to_native_windows_path() {
     let env = TestEnv::new();
-    let (pid, _vn, v_foto, recs) = setup_photo_project(&env, "Rel para Abs", &["Pessoa 1"]);
+    let (pid, _vn, v_foto, recs) = setup_photo_project(&env, "Upgrade Legacy Rel", &["Pessoa 1"]);
     env.services
         .photo_service
         .link_manual(&pid, &recs[0].id, &v_foto.id, &fixture_path("images/joao_silva.jpg"))
         .unwrap();
 
-    let out_dir = env.path().join("switch_abs");
+    let out_dir = env.path().join("upgrade_rel");
     env.services
         .export_service
         .export_package(&pid, &out_dir, false)
         .unwrap();
+    // Simulate a legacy exported XML with relative imagens/asset_001.jpg
+    let orig_xml = std::fs::read_to_string(out_dir.join("dados.xml")).unwrap();
+    let legacy_xml = orig_xml.replace(
+        &format!("{}\\imagens\\asset_001.jpg", out_dir.display()),
+        "imagens/asset_001.jpg",
+    );
+    std::fs::write(out_dir.join("dados.xml"), legacy_xml).unwrap();
+
     env.services
         .export_service
-        .update_exported_prefix(&out_dir, PathStrategy::AbsoluteFileUri)
+        .update_exported_prefix(&out_dir)
         .unwrap();
 
     let xml = std::fs::read_to_string(out_dir.join("dados.xml")).unwrap();
     let datasets = extract_xml_datasets(&xml);
-    let uri = datasets[0].1.get("Foto").unwrap();
-    assert!(uri.starts_with("file:///"));
-    assert!(uri.ends_with("/imagens/asset_001.jpg"));
+    let path_val = datasets[0].1.get("Foto").unwrap();
+    assert_eq!(path_val, &format!("{}\\imagens\\asset_001.jpg", out_dir.display()));
     env.services
         .export_service
         .validate_xml_structure(&xml, 1)
@@ -4060,18 +4067,20 @@ fn t1_f24_04_preserves_xml_headers_text_values_and_entities() {
         .link_manual(&proj.id, &recs[0].id, &v_foto.id, &fixture_path("images/joao_silva.jpg"))
         .unwrap();
 
-    let out_dir = env.path().join("preserve_prefix");
+    let out_dir_a = env.path().join("preserve_prefix_a");
+    let out_dir_b = env.path().join("preserve_prefix_b");
     env.services
         .export_service
-        .export_package(&proj.id, &out_dir, false)
+        .export_package(&proj.id, &out_dir_a, false)
         .unwrap();
-    let xml_before = std::fs::read_to_string(out_dir.join("dados.xml")).unwrap();
+    let xml_before = std::fs::read_to_string(out_dir_a.join("dados.xml")).unwrap();
 
+    std::fs::rename(&out_dir_a, &out_dir_b).unwrap();
     env.services
         .export_service
-        .update_exported_prefix(&out_dir, PathStrategy::AbsoluteFileUri)
+        .update_exported_prefix(&out_dir_b)
         .unwrap();
-    let xml_after = std::fs::read_to_string(out_dir.join("dados.xml")).unwrap();
+    let xml_after = std::fs::read_to_string(out_dir_b.join("dados.xml")).unwrap();
 
     let before_datasets_start = xml_before.find("<v:sampleDataSets").unwrap();
     let after_datasets_start = xml_after.find("<v:sampleDataSets").unwrap();
@@ -4115,13 +4124,11 @@ fn t1_f24_05_returns_accurate_prefix_update_report() {
     let rep = env
         .services
         .export_service
-        .update_exported_prefix(&out_dir, PathStrategy::AbsoluteFileUri)
+        .update_exported_prefix(&out_dir)
         .unwrap();
     assert_eq!(rep.updated_references, 3);
     assert_eq!(rep.verified_assets, 2);
     assert!(rep.missing_assets.is_empty());
-    assert_eq!(rep.previous_strategy, PathStrategy::RelativeToXml);
-    assert_eq!(rep.new_strategy, PathStrategy::AbsoluteFileUri);
     assert_eq!(rep.updated_dados_xml, out_dir.join("dados.xml"));
     assert_eq!(rep.updated_manifest_json, out_dir.join("manifest.json"));
 }

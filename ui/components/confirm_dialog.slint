@@ -1,0 +1,66 @@
+import { Button } from "std-widgets.slint";
+import { ThemeTokens } from "../theme/tokens.slint";
+
+export component ConfirmDialog inherits Rectangle {
+    in property <bool> open: false;
+    in property <string> title: "Confirmar ação";
+    in property <string> message: "";
+    in property <string> confirm-label: "Confirmar";
+    in property <string> cancel-label: "Cancelar";
+    in property <bool> is-destructive: true;
+    callback confirmed();
+    callback cancelled();
+
+    visible: root.open;
+    background: #00000099;
+
+    TouchArea {
+        // Intercepts clicks behind the modal dialog.
+    }
+
+    Rectangle {
+        width: min(500px, parent.width - 48px);
+        min-height: 196px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: 8px;
+        background: ThemeTokens.card-bg;
+        border-width: 1px;
+        border-color: ThemeTokens.subtle-border;
+
+        VerticalLayout {
+            padding: 20px;
+            spacing: 14px;
+
+            Text {
+                text: root.title;
+                font-size: 16px;
+                font-weight: 700;
+                wrap: word-wrap;
+                color: root.is-destructive ? ThemeTokens.err-fg : ThemeTokens.text-primary;
+            }
+
+            Text {
+                text: root.message;
+                font-size: 13px;
+                wrap: word-wrap;
+                vertical-stretch: 1;
+                color: ThemeTokens.text-primary;
+            }
+
+            HorizontalLayout {
+                alignment: end;
+                spacing: 10px;
+                Button {
+                    text: root.cancel-label;
+                    clicked => { root.cancelled(); }
+                }
+                Button {
+                    text: root.confirm-label;
+                    primary: true;
+                    clicked => { root.confirmed(); }
+                }
+            }
+        }
+    }
+}

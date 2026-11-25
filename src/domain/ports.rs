@@ -153,11 +153,7 @@ pub trait XmlEngine: Send + Sync {
     fn inspect_template(&self, xml_raw: &str) -> AppResult<ParsedXmlTemplate>;
     fn generate_xml(&self, spec: &XmlExportSpec) -> AppResult<String>;
     fn validate_xml_structure(&self, xml_raw: &str, expected_datasets: usize) -> AppResult<()>;
-    fn update_export_prefix(
-        &self,
-        export_dir: &Path,
-        new_strategy: PathStrategy,
-    ) -> AppResult<PrefixUpdateReport>;
+    fn update_export_prefix(&self, export_dir: &Path) -> AppResult<PrefixUpdateReport>;
 }
 
 pub trait PackageExporter: Send + Sync {

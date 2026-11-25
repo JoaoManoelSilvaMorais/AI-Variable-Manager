@@ -1,0 +1,140 @@
+import { Button, ComboBox, ScrollView } from "std-widgets.slint";
+import { ThemeTokens } from "../theme/tokens.slint";
+
+export component SettingsView inherits Rectangle {
+    in-out property <int> theme-mode-index: 0;
+    in property <string> db-path-label: "";
+    in property <string> app-version-label: "0.1.0";
+    in property <int> thumbnail-cache-count: 0;
+
+    callback theme-changed(int);
+    callback clear-thumbnail-cache();
+
+    background: ThemeTokens.surface-bg;
+
+    ScrollView {
+        min-height: 0px;
+        VerticalLayout {
+            padding: 20px;
+            spacing: 14px;
+            alignment: start;
+
+            Rectangle {
+                vertical-stretch: 0;
+                border-radius: 8px;
+                background: ThemeTokens.card-bg;
+                border-width: 1px;
+                border-color: ThemeTokens.subtle-border;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+
+                    Text {
+                        text: "Aparência e Interface";
+                        font-size: 15px;
+                        font-weight: 700;
+                        color: ThemeTokens.text-primary;
+                    }
+
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: 12px;
+                        Text {
+                            text: "Tema visual (Fluent Design):";
+                            vertical-alignment: center;
+                            horizontal-stretch: 0;
+                            font-size: 13px;
+                            color: ThemeTokens.text-secondary;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 0;
+                            ComboBox {
+                                width: 220px;
+                                model: ["Seguir Windows (Sistema)", "Tema Claro", "Tema Escuro"];
+                                current-index: root.theme-mode-index;
+                                selected => { root.theme-changed(self.current-index); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                vertical-stretch: 0;
+                border-radius: 8px;
+                background: ThemeTokens.card-bg;
+                border-width: 1px;
+                border-color: ThemeTokens.subtle-border;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+
+                    Text {
+                        text: "Armazenamento, Privacidade e Memória";
+                        font-size: 15px;
+                        font-weight: 700;
+                        color: ThemeTokens.text-primary;
+                    }
+                    Text {
+                        text: "Versão: AI Variable Manager \{root.app-version-label} (100% offline, zero telemetria, zero serviços externos)";
+                        font-size: 12px;
+                        wrap: word-wrap;
+                        color: ThemeTokens.text-primary;
+                    }
+                    Text {
+                        text: "Banco SQLite local: \{root.db-path-label}";
+                        font-size: 12px;
+                        wrap: word-wrap;
+                        color: ThemeTokens.info-fg;
+                    }
+                    HorizontalLayout {
+                        spacing: 10px;
+                        Text {
+                            text: "Miniaturas em cache LRU na RAM: \{root.thumbnail-cache-count} / 192 entradas";
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            horizontal-stretch: 1;
+                            color: ThemeTokens.text-secondary;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 0;
+                            Button {
+                                text: "Limpar Cache de Miniaturas";
+                                clicked => { root.clear-thumbnail-cache(); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                vertical-stretch: 0;
+                border-radius: 8px;
+                background: ThemeTokens.card-bg;
+                border-width: 1px;
+                border-color: ThemeTokens.subtle-border;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 8px;
+                    Text {
+                        text: "Guia Rápido no Adobe Illustrator";
+                        font-size: 15px;
+                        font-weight: 700;
+                        color: ThemeTokens.text-primary;
+                    }
+                    Text {
+                        text: "1. Exporte o pacote completo (dados.xml + imagens/ + manifest.json + relatorio.csv).\n2. Caso mova a pasta exportada depois, use 'Atualizar dados.xml' na aba XML e Exportação para atualizar o caminho absoluto das imagens.\n3. No Adobe Illustrator, abra Janela > Variáveis (Window > Variables).\n4. No menu do painel Variáveis, clique em Carregar Biblioteca de Variáveis... (Load Variable Library...) e selecione dados.xml.\n5. Alterne entre os Data Sets para conferir texto e foto vinculados antes de gerar o lote final.";
+                        font-size: 12px;
+                        wrap: word-wrap;
+                        color: ThemeTokens.text-secondary;
+                    }
+                }
+            }
+        }
+    }
+}

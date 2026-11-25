@@ -4,8 +4,7 @@ use uuid::Uuid;
 
 use crate::domain::ports::ProjectRepository;
 use crate::domain::project::{
-    PathStrategy, Project, ProjectMode, ProjectSnapshot, ProjectSummary, ThemePreference,
-    validate_project_name,
+    Project, ProjectMode, ProjectSnapshot, ProjectSummary, ThemePreference, validate_project_name,
 };
 use crate::domain::variable::{
     Variable, VariableKind, ensure_unique_xml_name, validate_display_name, validate_xml_name,
@@ -60,17 +59,6 @@ impl ProjectService {
             return self.repo.update_project_settings(&normalized);
         }
         self.repo.update_project_settings(project)
-    }
-
-    pub fn set_path_strategy(
-        &self,
-        project_id: &str,
-        strategy: PathStrategy,
-    ) -> AppResult<Project> {
-        let mut snap = self.repo.open_project(project_id)?;
-        snap.project.path_strategy = strategy;
-        self.repo.update_project_settings(&snap.project)?;
-        Ok(self.repo.open_project(project_id)?.project)
     }
 
     pub fn create_variable(

@@ -44,11 +44,7 @@ fn project_lifecycle_create_open_reopen_rename_delete() {
         let opened = services.project_service.open_project(&p1.id).unwrap();
         assert_eq!(opened.project.name, "Crachás SECOM 2026");
         assert_eq!(opened.project.mode, ProjectMode::WithTemplate);
-
-        services
-            .project_service
-            .set_path_strategy(&p1.id, PathStrategy::AbsoluteFileUri)
-            .unwrap();
+        assert_eq!(opened.project.path_strategy, PathStrategy::AbsolutePath);
 
         services
             .project_service
@@ -77,7 +73,7 @@ fn project_lifecycle_create_open_reopen_rename_delete() {
     assert_eq!(reopened.project.mode, ProjectMode::WithTemplate);
     assert_eq!(
         reopened.project.path_strategy,
-        PathStrategy::AbsoluteFileUri
+        PathStrategy::AbsolutePath
     );
 
     services.project_service.delete_project(&id1).unwrap();
@@ -474,164 +470,27 @@ fn atomic_rollback_on_constraint_violation() {
 }
 
 #[test]
-fn stub_services_return_not_implemented() {
+fn all_application_services_initialized() {
     let tmp = TempDir::new().unwrap();
     let db_path = tmp.path().join("aivm.db");
     let services = AppServices::new_with_db_path(&db_path).unwrap();
 
-    // DataService (M2)
+    // Verify missing project returns clean NotFound rather than NotImplemented across all services
     assert!(matches!(
-        services.data_service.add_record("p1", None),
-        Err(AppError::NotImplemented(_))
+        services.data_service.get_records_window("missing-p", 0, 50),
+        Err(AppError::Domain(DomainError::NotFound { .. }))
     ));
     assert!(matches!(
-        services.data_service.update_cell("p1", "r1", "v1", "x"),
-        Err(AppError::NotImplemented(_))
+        services.photo_service.compute_diagnostics("missing-p", false),
+        Err(AppError::Domain(DomainError::NotFound { .. }))
     ));
     assert!(matches!(
-        services
-            .data_service
-            .update_dataset_name("p1", "r1", "DS_1"),
-        Err(AppError::NotImplemented(_))
+        services.validation_service.audit_project("missing-p"),
+        Err(AppError::Domain(DomainError::NotFound { .. }))
     ));
     assert!(matches!(
-        services.data_service.delete_records("p1", &[]),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.data_service.reorder_records("p1", &[]),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.data_service.get_records_window("p1", 0, 50),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.data_service.paste_block("p1", 0, 0, "a\tb"),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.data_service.compute_cell_diagnostics("p1"),
-        Err(AppError::NotImplemented(_))
-    ));
-
-    // ImportService (M2)
-    assert!(matches!(
-        services.import_service.list_sheets(tmp.path()),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services
-            .import_service
-            .preview_spreadsheet(tmp.path(), None, Some(10)),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.import_service.commit_import(
-            "p1",
-            tmp.path(),
-            None,
-            0,
-            &[],
-            ai_variable_manager::domain::ImportMode::Append
-        ),
-        Err(AppError::NotImplemented(_))
-    ));
-
-    // PhotoService (M3)
-    assert!(matches!(
-        services.photo_service.scan_directory("p1", tmp.path()),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.photo_service.run_auto_match("p1"),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services
-            .photo_service
-            .accept_match_candidate("p1", "r1", "v1", "a1"),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services
-            .photo_service
-            .link_manual("p1", "r1", "v1", tmp.path()),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.photo_service.unlink_photo("p1", "r1", "v1"),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.photo_service.get_unmatched_pool("p1", "v1"),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.photo_service.batch_link("p1", &[], false),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.photo_service.compute_diagnostics("p1", false),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services
-            .photo_service
-            .get_or_request_thumbnail("a1", tmp.path()),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.photo_service.clear_thumbnail_cache(),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.photo_service.thumbnail_cache_len(),
-        Err(AppError::NotImplemented(_))
-    ));
-
-    // ValidationService (M4)
-    assert!(matches!(
-        services.validation_service.audit_project("p1"),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services
-            .validation_service
-            .audit_project_with_target("p1", Some(tmp.path())),
-        Err(AppError::NotImplemented(_))
-    ));
-
-    // ExportService (M4)
-    assert!(matches!(
-        services.export_service.inspect_xml_template("<svg/>"),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services
-            .export_service
-            .bind_xml_template("p1", None, "<svg/>"),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.export_service.generate_xml_preview("p1"),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services.export_service.validate_xml_structure("<svg/>", 0),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services
-            .export_service
-            .export_package("p1", tmp.path(), false),
-        Err(AppError::NotImplemented(_))
-    ));
-    assert!(matches!(
-        services
-            .export_service
-            .update_exported_prefix(tmp.path(), PathStrategy::RelativeToXml),
-        Err(AppError::NotImplemented(_))
+        services.export_service.generate_xml_preview("missing-p"),
+        Err(AppError::Domain(DomainError::NotFound { .. }))
     ));
 }
 

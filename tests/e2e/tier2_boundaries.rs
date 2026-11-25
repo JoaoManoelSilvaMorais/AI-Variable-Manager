@@ -1,7 +1,7 @@
 use ai_variable_manager::application::AppServices;
 use ai_variable_manager::domain::{
     Asset, CellDiagnosticKind, ImageFormat, ImportColumnMapping, ImportColumnTarget, ImportMode,
-    MatchStatus, NewVariableSpec, PathStrategy, ProjectMode, Record, RecordValue, ThumbnailState,
+    MatchStatus, NewVariableSpec, ProjectMode, Record, RecordValue, ThumbnailState,
     ValidationCode, ValidationSeverity, ValidationTarget, Variable, VariableKind,
 };
 use ai_variable_manager::shared::error::{AppError, DomainError, InfraError};
@@ -2482,13 +2482,9 @@ fn t2_f21_03_empty_optional_text_and_empty_optional_linked_file() {
 }
 
 #[test]
-fn t2_f21_04_absolute_file_uri_encodes_spaces_accents_and_parentheses() {
+fn t2_f21_04_native_absolute_path_preserves_spaces_accents_and_parentheses() {
     let env = TestEnv::new();
-    let (pid, _vn, v_foto, recs) = setup_photo_project(&env, "URI Especial", &["Joao"]);
-    env.services
-        .project_service
-        .set_path_strategy(&pid, PathStrategy::AbsoluteFileUri)
-        .unwrap();
+    let (pid, _vn, v_foto, recs) = setup_photo_project(&env, "Caminho Especial", &["Joao"]);
     env.services
         .photo_service
         .link_manual(&pid, &recs[0].id, &v_foto.id, &fixture_path("images/joao_silva.jpg"))
@@ -2503,12 +2499,12 @@ fn t2_f21_04_absolute_file_uri_encodes_spaces_accents_and_parentheses() {
     let xml = std::fs::read_to_string(out_dir.join("dados.xml")).unwrap();
     assert_illustrator_xml_valid(&xml, 1);
     let datasets = extract_xml_datasets(&xml);
-    let uri = datasets[0].1.get("Foto").unwrap();
-    assert!(uri.starts_with("file:///"));
-    assert!(!uri.contains('\\'));
-    assert!(uri.contains("%20"));
-    assert!(uri.contains("%23"));
-    assert!(uri.ends_with("/imagens/asset_001.jpg"));
+    let path_val = datasets[0].1.get("Foto").unwrap();
+    assert!(!path_val.starts_with("file://"));
+    assert!(!path_val.contains('/'));
+    assert!(!path_val.contains("%20"));
+    assert!(!path_val.contains("%23"));
+    assert!(path_val.contains(r"João Carlos (2026)\Lote #1\imagens\asset_001.jpg"));
 }
 
 #[test]
@@ -3015,7 +3011,7 @@ fn t2_f24_01_missing_dados_xml_or_manifest_json_rejected() {
     let err1 = env
         .services
         .export_service
-        .update_exported_prefix(&empty, PathStrategy::RelativeToXml)
+        .update_exported_prefix(&empty)
         .unwrap_err();
     assert!(matches!(
         err1,
@@ -3028,7 +3024,7 @@ fn t2_f24_01_missing_dados_xml_or_manifest_json_rejected() {
     let err2 = env
         .services
         .export_service
-        .update_exported_prefix(&empty, PathStrategy::RelativeToXml)
+        .update_exported_prefix(&empty)
         .unwrap_err();
     assert!(matches!(
         err2,
@@ -3058,7 +3054,7 @@ fn t2_f24_02_missing_referenced_asset_in_imagens_blocks_update() {
     let err = env
         .services
         .export_service
-        .update_exported_prefix(&out_dir, PathStrategy::AbsoluteFileUri)
+        .update_exported_prefix(&out_dir)
         .unwrap_err();
     assert!(matches!(
         err,
@@ -3089,7 +3085,7 @@ fn t2_f24_03_corrupt_dados_xml_aborts_atomic_rewrite() {
     let err = env
         .services
         .export_service
-        .update_exported_prefix(&out_dir, PathStrategy::AbsoluteFileUri)
+        .update_exported_prefix(&out_dir)
         .unwrap_err();
     assert!(matches!(err, AppError::Infra(InfraError::Xml(_))));
     assert_file_unchanged(&out_dir.join("manifest.json"), &manifest_before);
@@ -3114,7 +3110,7 @@ fn t2_f24_04_moved_to_path_with_spaces_and_portuguese_accents() {
 
     env.services
         .export_service
-        .update_exported_prefix(&dst_dir, PathStrategy::AbsoluteFileUri)
+        .update_exported_prefix(&dst_dir)
         .unwrap();
 
     let xml = std::fs::read_to_string(dst_dir.join("dados.xml")).unwrap();
@@ -3124,10 +3120,10 @@ fn t2_f24_04_moved_to_path_with_spaces_and_portuguese_accents() {
         .validate_xml_structure(&xml, 1)
         .unwrap();
     let datasets = extract_xml_datasets(&xml);
-    let uri = datasets[0].1.get("Foto").unwrap();
-    assert!(uri.starts_with("file:///"));
-    assert!(uri.contains("%20"));
-    assert!(uri.ends_with("/imagens/asset_001.jpg"));
+    let path_val = datasets[0].1.get("Foto").unwrap();
+    assert!(!path_val.starts_with("file://"));
+    assert!(!path_val.contains("%20"));
+    assert!(path_val.ends_with(r"Crachás João (Final)\imagens\asset_001.jpg"));
 }
 
 #[test]
@@ -3147,14 +3143,14 @@ fn t2_f24_05_idempotent_repeated_prefix_update() {
 
     env.services
         .export_service
-        .update_exported_prefix(&out_dir, PathStrategy::AbsoluteFileUri)
+        .update_exported_prefix(&out_dir)
         .unwrap();
     let xml_first = snapshot_bytes(&out_dir.join("dados.xml"));
     let manifest_first = snapshot_bytes(&out_dir.join("manifest.json"));
 
     env.services
         .export_service
-        .update_exported_prefix(&out_dir, PathStrategy::AbsoluteFileUri)
+        .update_exported_prefix(&out_dir)
         .unwrap();
     assert_file_unchanged(&out_dir.join("dados.xml"), &xml_first);
     let manifest_second = std::fs::read_to_string(out_dir.join("manifest.json")).unwrap();

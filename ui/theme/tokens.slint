@@ -1,0 +1,145 @@
+import { Palette, StyleMetrics } from "std-widgets.slint";
+
+export struct ProjectSummaryItem {
+    id: string,
+    name: string,
+    mode-label: string,
+    record-count: int,
+    variable-count: int,
+    updated-at: string,
+    is-active: bool,
+}
+
+export struct VariableItem {
+    id: string,
+    display-name: string,
+    xml-name: string,
+    kind-label: string,
+    is-photo: bool,
+    required: bool,
+    mapped-template-var: string,
+}
+
+export struct GridCellItem {
+    variable-id: string,
+    text: string,
+    is-photo: bool,
+    status-kind: int,
+    status-label: string,
+    is-duplicate: bool,
+    is-missing-error: bool,
+}
+
+export struct GridRowItem {
+    record-id: string,
+    row-number: int,
+    dataset-name: string,
+    selected: bool,
+    has-issue: bool,
+    cells: [GridCellItem],
+}
+
+export struct ImportColumnItem {
+    source-index: int,
+    source-header: string,
+    sample-preview: string,
+    target-mode: int,
+    new-name: string,
+    existing-var-index: int,
+}
+
+export struct ImportPreviewRowItem {
+    row-index: int,
+    cells: [string],
+}
+
+export struct PhotoCellItem {
+    record-id: string,
+    variable-id: string,
+    dataset-name: string,
+    record-columns-text: string,
+    variable-name: string,
+    search-text: string,
+    status-kind: int,
+    status-label: string,
+    linked-file-name: string,
+    linked-path: string,
+    has-thumb: bool,
+    thumb: image,
+    candidate-count: int,
+    selected-for-batch: bool,
+}
+
+export struct PhotoCandidateItem {
+    asset-id: string,
+    file-name: string,
+    relative-path: string,
+    full-path: string,
+    confidence-label: string,
+    has-thumb: bool,
+    thumb: image,
+}
+
+export struct PhotoAssetItem {
+    asset-id: string,
+    file-name: string,
+    relative-path: string,
+    full-path: string,
+    format-label: string,
+    size-label: string,
+    is-linked: bool,
+    exists-on-disk: bool,
+    has-thumb: bool,
+    thumb: image,
+}
+
+export struct AuditIssueItem {
+    code: string,
+    severity-kind: int,
+    title: string,
+    message: string,
+    target-kind: string,
+    target-record-id: string,
+    target-var-id: string,
+}
+
+export struct TemplateVarItem {
+    var-name: string,
+    trait-label: string,
+    wrapper-label: string,
+    is-ignored: bool,
+    mapped-col-index: int,
+}
+
+export global ThemeTokens {
+    in-out property <int> theme-mode-index: 0; // 0 = Sistema, 1 = Claro, 2 = Escuro
+
+    // Detect actual effective dark/light theme reliably even when Palette.color-scheme == ColorScheme.unknown (Sistema).
+    out property <bool> is-dark: StyleMetrics.window-background.red < 128;
+
+    // Surface hierarchy
+    out property <color> surface-bg: is-dark ? #1B1B1B : #F3F3F3;
+    out property <color> sidebar-bg: is-dark ? #161616 : #EAEAEA;
+    out property <color> nav-hover-bg: is-dark ? #262626 : #DFDFDF;
+    out property <color> nav-active-bg: is-dark ? #2D2D2D : #FFFFFF;
+    out property <color> card-bg: is-dark ? #242424 : #FFFFFF;
+    out property <color> muted-bg: is-dark ? #2D2D2D : #EFEFEF;
+    out property <color> stripe-bg: is-dark ? #202020 : #F8F8F8;
+    out property <color> selected-row-bg: is-dark ? #1F3549 : #E3F0FC;
+    out property <color> subtle-border: is-dark ? #3A3A3A : #D4D4D4;
+
+    // Typography contrast
+    out property <color> text-primary: is-dark ? #F5F5F5 : #1A1A1A;
+    out property <color> text-secondary: is-dark ? #B5B5B5 : #555555;
+    out property <color> text-disabled: is-dark ? #6E6E6E : #9A9A9A;
+
+    // Semantic status colors tailored for legible Fluent Light/Dark contrast
+    out property <color> ok-bg: is-dark ? #173B22 : #DFF6DD;
+    out property <color> ok-fg: is-dark ? #7CE38B : #0E6A0E;
+    out property <color> warn-bg: is-dark ? #423315 : #FFF4CE;
+    out property <color> warn-fg: is-dark ? #FFD666 : #7A4800;
+    out property <color> err-bg: is-dark ? #4A2024 : #FDE7E9;
+    out property <color> err-fg: is-dark ? #FF9BA5 : #B42318;
+    out property <color> info-bg: is-dark ? #1B3147 : #E8F3FC;
+    out property <color> info-fg: is-dark ? #7CCBFF : #00529B;
+}

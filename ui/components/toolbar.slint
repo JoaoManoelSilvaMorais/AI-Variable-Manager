@@ -1,0 +1,114 @@
+import { Button, ComboBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme/tokens.slint";
+
+export component Toolbar inherits VerticalLayout {
+    in property <string> view-title: "Projetos";
+    in property <string> view-subtitle: "";
+    in-out property <int> theme-mode-index: 0;
+    in property <string> banner-text: "";
+    in property <int> banner-kind: 0; // 0=none, 1=info/ok, 2=warn, 3=error
+    callback theme-changed(int);
+    callback dismiss-banner();
+
+    Rectangle {
+        height: 60px;
+        background: ThemeTokens.card-bg;
+
+        Rectangle {
+            y: parent.height - 1px;
+            width: 100%;
+            height: 1px;
+            background: ThemeTokens.subtle-border;
+        }
+
+        HorizontalLayout {
+            padding-left: 20px;
+            padding-right: 16px;
+            spacing: 12px;
+
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                spacing: 2px;
+                Text {
+                    text: root.view-title;
+                    font-size: 16px;
+                    font-weight: 700;
+                    color: ThemeTokens.text-primary;
+                }
+                if root.view-subtitle != "": Text {
+                    text: root.view-subtitle;
+                    font-size: 12px;
+                    overflow: elide;
+                    color: ThemeTokens.text-secondary;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    Text {
+                        text: "Tema:";
+                        vertical-alignment: center;
+                        horizontal-stretch: 0;
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: ThemeTokens.text-secondary;
+                    }
+                    ComboBox {
+                        width: 132px;
+                        horizontal-stretch: 0;
+                        model: ["Sistema", "Claro", "Escuro"];
+                        current-index: root.theme-mode-index;
+                        selected => {
+                            root.theme-changed(self.current-index);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.banner-kind > 0 && root.banner-text != "": Rectangle {
+        min-height: 44px;
+        background: root.banner-kind == 3 ? ThemeTokens.err-bg :
+            root.banner-kind == 2 ? ThemeTokens.warn-bg : ThemeTokens.ok-bg;
+
+        Rectangle {
+            y: parent.height - 1px;
+            width: 100%;
+            height: 1px;
+            background: ThemeTokens.subtle-border;
+        }
+
+        HorizontalLayout {
+            padding-left: 20px;
+            padding-right: 16px;
+            padding-top: 6px;
+            padding-bottom: 6px;
+            spacing: 12px;
+
+            Text {
+                text: root.banner-text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                wrap: word-wrap;
+                font-size: 12px;
+                font-weight: 600;
+                color: root.banner-kind == 3 ? ThemeTokens.err-fg :
+                    root.banner-kind == 2 ? ThemeTokens.warn-fg : ThemeTokens.ok-fg;
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "Fechar";
+                    clicked => { root.dismiss-banner(); }
+                }
+            }
+        }
+    }
+}

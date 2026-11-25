@@ -44,22 +44,21 @@ impl ProjectMode {
 #[serde(rename_all = "snake_case")]
 pub enum PathStrategy {
     #[default]
-    RelativeToXml,
-    AbsoluteFileUri,
+    #[serde(alias = "absolute_file_uri", alias = "relative_to_xml")]
+    AbsolutePath,
 }
 
 impl PathStrategy {
+    /// Kept compatible with the existing SQLite `CHECK` constraint on `projects.path_strategy`.
     pub fn as_db_str(&self) -> &'static str {
         match self {
-            Self::RelativeToXml => "relative_to_xml",
-            Self::AbsoluteFileUri => "absolute_file_uri",
+            Self::AbsolutePath => "absolute_file_uri",
         }
     }
 
     pub fn from_db_str(raw: &str) -> AppResult<Self> {
         match raw {
-            "relative_to_xml" => Ok(Self::RelativeToXml),
-            "absolute_file_uri" => Ok(Self::AbsoluteFileUri),
+            "absolute_path" | "absolute_file_uri" | "relative_to_xml" => Ok(Self::AbsolutePath),
             other => Err(AppError::validation(format!(
                 "Estratégia de caminho inválida: '{other}'"
             ))),
@@ -68,8 +67,7 @@ impl PathStrategy {
 
     pub fn display_label_pt_br(&self) -> &'static str {
         match self {
-            Self::RelativeToXml => "Relativo ao XML (imagens/...)",
-            Self::AbsoluteFileUri => "URI Absoluta (file:///...)",
+            Self::AbsolutePath => "Caminho Absoluto (Windows)",
         }
     }
 }
@@ -213,12 +211,18 @@ mod tests {
         for mode in [ProjectMode::WithTemplate, ProjectMode::WithoutTemplate] {
             assert_eq!(ProjectMode::from_db_str(mode.as_db_str()).unwrap(), mode);
         }
-        for strategy in [PathStrategy::RelativeToXml, PathStrategy::AbsoluteFileUri] {
-            assert_eq!(
-                PathStrategy::from_db_str(strategy.as_db_str()).unwrap(),
-                strategy
-            );
-        }
+        assert_eq!(
+            PathStrategy::from_db_str(PathStrategy::AbsolutePath.as_db_str()).unwrap(),
+            PathStrategy::AbsolutePath
+        );
+        assert_eq!(
+            PathStrategy::from_db_str("relative_to_xml").unwrap(),
+            PathStrategy::AbsolutePath
+        );
+        assert_eq!(
+            PathStrategy::from_db_str("absolute_path").unwrap(),
+            PathStrategy::AbsolutePath
+        );
         for theme in [
             ThemePreference::Light,
             ThemePreference::Dark,

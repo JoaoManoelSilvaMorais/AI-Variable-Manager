@@ -1,0 +1,49 @@
+import { Spinner } from "std-widgets.slint";
+import { ThemeTokens } from "../theme/tokens.slint";
+
+export component StatusBar inherits Rectangle {
+    in property <string> status-text: "Pronto";
+    in property <string> storage-hint: "Armazenamento SQLite local";
+    in property <bool> is-busy: false;
+
+    height: 30px;
+    background: ThemeTokens.sidebar-bg;
+
+    Rectangle {
+        y: 0px;
+        width: 100%;
+        height: 1px;
+        background: ThemeTokens.subtle-border;
+    }
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 12px;
+
+        if is-busy: VerticalLayout {
+            alignment: center;
+            Spinner {
+                width: 16px;
+                height: 16px;
+                indeterminate: true;
+            }
+        }
+
+        Text {
+            text: root.status-text;
+            font-size: 11px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+            color: ThemeTokens.text-primary;
+        }
+
+        Text {
+            text: root.storage-hint;
+            font-size: 11px;
+            vertical-alignment: center;
+            color: ThemeTokens.text-secondary;
+        }
+    }
+}

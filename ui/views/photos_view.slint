@@ -1,0 +1,561 @@
+import { Button, CheckBox, ComboBox, LineEdit, ListView } from "std-widgets.slint";
+import { PhotoAssetItem, PhotoCandidateItem, PhotoCellItem, ThemeTokens } from "../theme/tokens.slint";
+
+component KpiPill inherits Rectangle {
+    in property <string> label;
+    in property <int> count;
+    in property <color> bg;
+    in property <color> fg;
+
+    border-radius: 6px;
+    background: root.bg;
+    border-width: 1px;
+    border-color: ThemeTokens.subtle-border;
+    height: 30px;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 6px;
+        Text {
+            text: "\{root.count}";
+            font-size: 13px;
+            font-weight: 700;
+            vertical-alignment: center;
+            color: root.fg;
+        }
+        Text {
+            text: root.label;
+            font-size: 11px;
+            font-weight: 600;
+            vertical-alignment: center;
+            color: root.fg;
+        }
+    }
+}
+
+export component PhotosView inherits Rectangle {
+    in property <string> photo-root-dir: "";
+    in property <[string]> photo-column-names;
+    in-out property <int> selected-photo-col-index: 0;
+    in-out property <int> filter-index: 0;
+
+    in property <int> total-records: 0;
+    in property <int> total-assets: 0;
+    in property <int> matched-count: 0;
+    in property <int> suggested-count: 0;
+    in property <int> ambiguous-count: 0;
+    in property <int> missing-count: 0;
+    in property <int> unmatched-assets-count: 0;
+    in property <int> duplicate-warnings-count: 0;
+    in property <int> missing-on-disk-count: 0;
+
+    in property <[PhotoCellItem]> photo-cells;
+    in-out property <int> selected-cell-index: -1;
+    in property <[PhotoCandidateItem]> active-candidates;
+    in property <[PhotoAssetItem]> unmatched-assets;
+    in-out property <string> pool-filter-text: "";
+    in-out property <bool> batch-overwrite-existing: false;
+    in-out property <int> selected-pool-asset-index: -1;
+
+    callback pick-photo-folder();
+    callback rescan-photo-folder();
+    callback run-auto-match();
+    callback filter-changed(int);
+    callback photo-column-changed(int);
+    callback select-photo-cell(int);
+    callback toggle-batch-cell(int);
+    callback pick-manual-photo(int);
+    callback unlink-photo(int);
+    callback accept-candidate(int, string);
+    callback request-cell-thumb(int);
+    callback request-candidate-thumb(int);
+    callback request-asset-thumb(int);
+    callback select-pool-asset(int);
+    callback link-selected-pool-asset();
+    callback batch-link-selected-to-pool();
+    callback pool-filter-changed(string);
+
+    background: ThemeTokens.surface-bg;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+
+        // Top actions & directory
+        Rectangle {
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 10px;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Button {
+                        text: "Selecionar Pasta de Fotos...";
+                        primary: true;
+                        clicked => { root.pick-photo-folder(); }
+                    }
+                    Button {
+                        text: "Reescanear";
+                        enabled: root.photo-root-dir != "";
+                        clicked => { root.rescan-photo-folder(); }
+                    }
+                    Button {
+                        text: "Executar Match Automático";
+                        enabled: root.total-assets > 0 && root.photo-column-names.length > 0;
+                        clicked => { root.run-auto-match(); }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    if root.photo-column-names.length > 0: HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: "Coluna:"; vertical-alignment: center; font-size: 12px; color: ThemeTokens.text-secondary; }
+                        ComboBox {
+                            width: 155px;
+                            model: root.photo-column-names;
+                            current-index: root.selected-photo-col-index;
+                            selected => { root.photo-column-changed(self.current-index); }
+                        }
+                    }
+                    ComboBox {
+                        width: 175px;
+                        model: ["Todos os registros", "Confirmadas", "Sugestões / Ambíguas", "Sem foto / Erro"];
+                        current-index: root.filter-index;
+                        selected => { root.filter-changed(self.current-index); }
+                    }
+                }
+
+                Text {
+                    text: root.photo-root-dir != "" ? "Pasta escaneada: \{root.photo-root-dir}" : "Nenhuma pasta selecionada. Você ainda pode vincular arquivos manualmente por registro.";
+                    font-size: 12px;
+                    overflow: elide;
+                    color: ThemeTokens.info-fg;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    KpiPill { label: "Confirmadas"; count: root.matched-count; bg: ThemeTokens.ok-bg; fg: ThemeTokens.ok-fg; }
+                    KpiPill { label: "Sugestões"; count: root.suggested-count; bg: ThemeTokens.warn-bg; fg: ThemeTokens.warn-fg; }
+                    KpiPill { label: "Ambíguas"; count: root.ambiguous-count; bg: ThemeTokens.err-bg; fg: ThemeTokens.err-fg; }
+                    KpiPill { label: "Sem Foto"; count: root.missing-count; bg: ThemeTokens.muted-bg; fg: ThemeTokens.text-primary; }
+                    KpiPill { label: "Sobras na Pasta"; count: root.unmatched-assets-count; bg: ThemeTokens.info-bg; fg: ThemeTokens.info-fg; }
+                    if root.duplicate-warnings-count > 0: KpiPill { label: "Duplicadas"; count: root.duplicate-warnings-count; bg: ThemeTokens.warn-bg; fg: ThemeTokens.warn-fg; }
+                    if root.missing-on-disk-count > 0: KpiPill { label: "Ausentes no Disco"; count: root.missing-on-disk-count; bg: ThemeTokens.err-bg; fg: ThemeTokens.err-fg; }
+                }
+            }
+        }
+
+        if root.photo-column-names.length == 0: Rectangle {
+            vertical-stretch: 1;
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+            VerticalLayout {
+                alignment: center;
+                padding: 28px;
+                spacing: 8px;
+                Text {
+                    text: "Este projeto não possui colunas do tipo 'Fotografia (Vínculo)'.";
+                    font-size: 15px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    color: ThemeTokens.text-primary;
+                }
+                Text {
+                    text: "Vá na aba 'Dados e Colunas', clique em 'Colunas' e adicione uma coluna com o tipo 'Fotografia (Vínculo)'.";
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                    color: ThemeTokens.text-secondary;
+                }
+            }
+        }
+
+        if root.photo-column-names.length > 0: HorizontalLayout {
+            vertical-stretch: 1;
+            min-height: 0px;
+            spacing: 12px;
+
+            // Left pane: records & their link status
+            Rectangle {
+                horizontal-stretch: 3;
+                min-height: 0px;
+                border-radius: 8px;
+                background: ThemeTokens.card-bg;
+                border-width: 1px;
+                border-color: ThemeTokens.subtle-border;
+
+                VerticalLayout {
+                    Rectangle {
+                        height: 38px;
+                        background: ThemeTokens.muted-bg;
+                        Rectangle {
+                            y: parent.height - 1px;
+                            width: 100%;
+                            height: 1px;
+                            background: ThemeTokens.subtle-border;
+                        }
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            Text {
+                                text: "Registros (\{root.photo-cells.length} exibidos)";
+                                font-size: 12px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                                color: ThemeTokens.text-primary;
+                            }
+                        }
+                    }
+
+                    ListView {
+                        vertical-stretch: 1;
+                        min-height: 0px;
+                        for cell[idx] in root.photo-cells: Rectangle {
+                            min-height: 90px;
+                            background: root.selected-cell-index == idx ? ThemeTokens.selected-row-bg : transparent;
+
+                            init => {
+                                if (!cell.has-thumb && cell.linked-path != "") {
+                                    root.request-cell-thumb(idx);
+                                }
+                            }
+
+                            Rectangle {
+                                y: parent.height - 1px;
+                                width: 100%;
+                                height: 1px;
+                                background: ThemeTokens.subtle-border;
+                            }
+
+                            TouchArea {
+                                clicked => { root.select-photo-cell(idx); }
+                            }
+
+                            HorizontalLayout {
+                                padding: 10px;
+                                spacing: 10px;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    CheckBox {
+                                        checked: cell.selected-for-batch;
+                                        toggled => { root.toggle-batch-cell(idx); }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    Rectangle {
+                                        width: 56px;
+                                        height: 56px;
+                                        border-radius: 4px;
+                                        background: ThemeTokens.muted-bg;
+                                        border-width: 1px;
+                                        border-color: ThemeTokens.subtle-border;
+
+                                        if cell.has-thumb: Image {
+                                            width: 100%;
+                                            height: 100%;
+                                            source: cell.thumb;
+                                            image-fit: contain;
+                                        }
+                                        if !cell.has-thumb: Text {
+                                            text: "Sem\nfoto";
+                                            font-size: 10px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            color: ThemeTokens.text-secondary;
+                                        }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    spacing: 4px;
+                                    HorizontalLayout {
+                                        alignment: start;
+                                        spacing: 8px;
+                                        Text {
+                                            text: cell.dataset-name;
+                                            font-size: 13px;
+                                            font-weight: 700;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 0;
+                                            color: ThemeTokens.text-primary;
+                                        }
+                                        Rectangle {
+                                            height: 20px;
+                                            horizontal-stretch: 0;
+                                            border-radius: 4px;
+                                            background: cell.status-kind == 3 ? ThemeTokens.ok-bg :
+                                                cell.status-kind == 1 ? ThemeTokens.warn-bg :
+                                                cell.status-kind == 2 || cell.status-kind == 4 ? ThemeTokens.err-bg :
+                                                ThemeTokens.muted-bg;
+                                            HorizontalLayout {
+                                                padding-left: 7px;
+                                                padding-right: 7px;
+                                                Text {
+                                                    text: cell.status-label;
+                                                    font-size: 10px;
+                                                    font-weight: 700;
+                                                    vertical-alignment: center;
+                                                    color: cell.status-kind == 3 ? ThemeTokens.ok-fg :
+                                                        cell.status-kind == 1 ? ThemeTokens.warn-fg :
+                                                        cell.status-kind == 2 || cell.status-kind == 4 ? ThemeTokens.err-fg :
+                                                        ThemeTokens.text-primary;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if cell.record-columns-text != "": Text {
+                                        text: cell.record-columns-text;
+                                        font-size: 11px;
+                                        wrap: word-wrap;
+                                        color: ThemeTokens.text-primary;
+                                    }
+                                    Text {
+                                        text: "Chave: \"\{cell.search-text}\"  •  Arquivo: \{cell.linked-file-name != "" ? cell.linked-file-name : "(nenhum)"}";
+                                        font-size: 10px;
+                                        overflow: elide;
+                                        color: ThemeTokens.text-secondary;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        Button {
+                                            text: "Escolher...";
+                                            clicked => { root.pick-manual-photo(idx); }
+                                        }
+                                        if cell.linked-path != "": Button {
+                                            text: "Desvincular";
+                                            clicked => { root.unlink-photo(idx); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Right pane: Candidates + Unmatched Photo Pool (Methods A & C)
+            Rectangle {
+                horizontal-stretch: 2;
+                min-height: 0px;
+                border-radius: 8px;
+                background: ThemeTokens.card-bg;
+                border-width: 1px;
+                border-color: ThemeTokens.subtle-border;
+
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 10px;
+
+                    if root.selected-cell-index >= 0 && root.selected-cell-index < root.photo-cells.length: Rectangle {
+                        border-radius: 6px;
+                        background: ThemeTokens.info-bg;
+                        border-width: 1px;
+                        border-color: ThemeTokens.subtle-border;
+                        VerticalLayout {
+                            padding: 10px;
+                            spacing: 4px;
+                            Text {
+                                text: "Registro selecionado: \{root.photo-cells[root.selected-cell-index].dataset-name}";
+                                font-size: 11px;
+                                font-weight: 700;
+                                color: ThemeTokens.info-fg;
+                            }
+                            if root.photo-cells[root.selected-cell-index].record-columns-text != "": Text {
+                                text: root.photo-cells[root.selected-cell-index].record-columns-text;
+                                font-size: 11px;
+                                wrap: word-wrap;
+                                color: ThemeTokens.text-primary;
+                            }
+                        }
+                    }
+
+                    if root.active-candidates.length > 0: VerticalLayout {
+                        spacing: 6px;
+                        Text {
+                            text: "Candidatas de Match (Registro selecionado)";
+                            font-size: 13px;
+                            font-weight: 700;
+                            color: ThemeTokens.text-primary;
+                        }
+                        for cand[cidx] in root.active-candidates: Rectangle {
+                            height: 68px;
+                            border-radius: 6px;
+                            background: ThemeTokens.muted-bg;
+                            border-width: 1px;
+                            border-color: ThemeTokens.subtle-border;
+                            init => {
+                                if (!cand.has-thumb) {
+                                    root.request-candidate-thumb(cidx);
+                                }
+                            }
+                            HorizontalLayout {
+                                padding: 8px;
+                                spacing: 8px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Rectangle {
+                                        width: 48px;
+                                        height: 48px;
+                                        border-radius: 4px;
+                                        background: ThemeTokens.card-bg;
+                                        if cand.has-thumb: Image {
+                                            width: 100%;
+                                            height: 100%;
+                                            source: cand.thumb;
+                                            image-fit: contain;
+                                        }
+                                    }
+                                }
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text {
+                                        text: cand.file-name;
+                                        font-size: 12px;
+                                        font-weight: 700;
+                                        overflow: elide;
+                                        color: ThemeTokens.text-primary;
+                                    }
+                                    Text {
+                                        text: cand.confidence-label;
+                                        font-size: 11px;
+                                        color: ThemeTokens.info-fg;
+                                    }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    Button {
+                                        text: "Confirmar";
+                                        primary: true;
+                                        clicked => { root.accept-candidate(root.selected-cell-index, cand.asset-id); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "Pool de Fotos sem Uso (\{root.unmatched-assets.length})";
+                        font-size: 13px;
+                        font-weight: 700;
+                        color: ThemeTokens.text-primary;
+                    }
+
+                    LineEdit {
+                        text <=> root.pool-filter-text;
+                        placeholder-text: "Filtrar fotos pelo nome...";
+                        edited(v) => { root.pool-filter-changed(v); }
+                    }
+
+                    CheckBox {
+                        text: "Sobrescrever vínculos existentes no lote";
+                        checked <=> root.batch-overwrite-existing;
+                    }
+
+                    Rectangle {
+                        vertical-stretch: 1;
+                        min-height: 0px;
+                        border-radius: 6px;
+                        background: ThemeTokens.surface-bg;
+                        border-width: 1px;
+                        border-color: ThemeTokens.subtle-border;
+
+                        ListView {
+                            min-height: 0px;
+                            for asset[aidx] in root.unmatched-assets: Rectangle {
+                                height: 64px;
+                                background: root.selected-pool-asset-index == aidx ? ThemeTokens.selected-row-bg : transparent;
+
+                                init => {
+                                    if (!asset.has-thumb) {
+                                        root.request-asset-thumb(aidx);
+                                    }
+                                }
+
+                                Rectangle {
+                                    y: parent.height - 1px;
+                                    width: 100%;
+                                    height: 1px;
+                                    background: ThemeTokens.subtle-border;
+                                }
+
+                                TouchArea {
+                                    clicked => { root.select-pool-asset(aidx); }
+                                }
+
+                                HorizontalLayout {
+                                    padding: 8px;
+                                    spacing: 8px;
+                                    VerticalLayout {
+                                        alignment: center;
+                                        Rectangle {
+                                            width: 46px;
+                                            height: 46px;
+                                            border-radius: 4px;
+                                            background: ThemeTokens.muted-bg;
+                                            if asset.has-thumb: Image {
+                                                width: 100%;
+                                                height: 100%;
+                                                source: asset.thumb;
+                                                image-fit: contain;
+                                            }
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        alignment: center;
+                                        spacing: 2px;
+                                        Text {
+                                            text: asset.file-name;
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            overflow: elide;
+                                            color: ThemeTokens.text-primary;
+                                        }
+                                        Text {
+                                            text: "\{asset.format-label}  •  \{asset.size-label}";
+                                            font-size: 11px;
+                                            color: ThemeTokens.text-secondary;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Button {
+                            text: "Vincular ao Selecionado";
+                            primary: true;
+                            horizontal-stretch: 1;
+                            enabled: root.selected-cell-index >= 0 && root.selected-pool-asset-index >= 0;
+                            clicked => { root.link-selected-pool-asset(); }
+                        }
+                        Button {
+                            text: "Vincular Lote Marcado";
+                            enabled: root.selected-pool-asset-index >= 0;
+                            clicked => { root.batch-link-selected-to-pool(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

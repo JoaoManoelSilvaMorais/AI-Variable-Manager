@@ -1,0 +1,873 @@
+import {
+    Button, CheckBox, ComboBox, LineEdit, ListView, ScrollView, TextEdit
+} from "std-widgets.slint";
+import {
+    GridRowItem, ImportColumnItem, ImportPreviewRowItem, ThemeTokens, VariableItem
+} from "../theme/tokens.slint";
+
+export component DataGridView inherits Rectangle {
+    in property <bool> has-active-project: false;
+    in property <[VariableItem]> variables;
+    in property <[GridRowItem]> rows;
+    in property <int> total-records: 0;
+    in property <int> current-page: 1;
+    in property <int> total-pages: 1;
+    in property <int> selected-count: 0;
+
+    in-out property <bool> show-columns-panel: false;
+    in-out property <bool> show-paste-panel: false;
+    in-out property <string> paste-draft: "";
+    in-out property <int> paste-start-row-1based: 1;
+    in-out property <int> paste-start-col-index: 0;
+
+    in-out property <string> new-var-name: "";
+    in-out property <int> new-var-kind: 0;
+    in-out property <bool> new-var-required: false;
+    in-out property <string> edit-var-id: "";
+    in-out property <string> edit-var-display: "";
+    in-out property <string> edit-var-xml: "";
+
+    in-out property <bool> show-import-wizard: false;
+    in property <string> import-file-path: "";
+    in property <[string]> import-sheets;
+    in-out property <int> import-sheet-index: 0;
+    in-out property <int> import-header-row-1based: 1;
+    in-out property <int> import-mode-index: 0; // 0 = Append, 1 = Replace
+    in property <[ImportColumnItem]> import-columns;
+    in property <[ImportPreviewRowItem]> import-preview-rows;
+    in property <[string]> existing-var-names;
+
+    callback add-record();
+    callback toggle-row-selection(string);
+    callback move-record-up(string);
+    callback move-record-down(string);
+    callback request-delete-selected-records();
+    callback dataset-name-edited(string, string);
+    callback cell-edited(string, string, string);
+    callback refresh-diagnostics();
+    callback pick-cell-photo(string, string);
+    callback page-prev();
+    callback page-next();
+
+    callback paste-os-clipboard(int, int);
+    callback paste-manual-block(int, int, string);
+
+    callback create-variable(string, int, bool);
+    callback move-variable(string, int);
+    callback toggle-variable-required(string, bool);
+    callback toggle-variable-kind(string, bool);
+    callback start-rename-variable(string, string, string);
+    callback commit-rename-variable(string, string, string);
+    callback cancel-rename-variable();
+    callback duplicate-variable(string);
+    callback request-delete-variable(string, string);
+
+    callback open-import-file();
+    callback import-sheet-changed(int);
+    callback import-header-row-changed(int);
+    callback import-column-target-changed(int, int);
+    callback import-column-new-name-changed(int, string);
+    callback import-column-existing-changed(int, int);
+    callback commit-import();
+    callback close-import-wizard();
+
+    background: ThemeTokens.surface-bg;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+
+        // Top action bar
+        Rectangle {
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+
+            HorizontalLayout {
+                padding: 10px;
+                spacing: 8px;
+
+                Button {
+                    text: "+ Nova Linha";
+                    primary: true;
+                    clicked => { root.add-record(); }
+                }
+                Button {
+                    text: "Importar Planilha (.xlsx / .csv)";
+                    clicked => { root.open-import-file(); }
+                }
+                Button {
+                    text: root.show-columns-panel ? "Ocultar Colunas" : "Colunas (\{root.variables.length})";
+                    clicked => { root.show-columns-panel = !root.show-columns-panel; }
+                }
+                Button {
+                    text: "Colar Bloco";
+                    clicked => { root.show-paste-panel = !root.show-paste-panel; }
+                }
+                Button {
+                    text: "Validar Grade";
+                    clicked => { root.refresh-diagnostics(); }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                if root.selected-count > 0: Button {
+                    text: "Excluir (\{root.selected-count})";
+                    clicked => { root.request-delete-selected-records(); }
+                }
+            }
+        }
+
+        // Collapsible column manager
+        if root.show-columns-panel: Rectangle {
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 10px;
+
+                Text {
+                    text: "Colunas e Variáveis XML";
+                    font-size: 14px;
+                    font-weight: 700;
+                    color: ThemeTokens.text-primary;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    LineEdit {
+                        horizontal-stretch: 2;
+                        text <=> root.new-var-name;
+                        placeholder-text: "Nome da nova coluna (ex.: Nome, Cargo, Foto)";
+                        accepted => {
+                            root.create-variable(root.new-var-name, root.new-var-kind, root.new-var-required);
+                        }
+                    }
+                    ComboBox {
+                        width: 185px;
+                        model: ["Texto", "Fotografia (Vínculo)"];
+                        current-index <=> root.new-var-kind;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        CheckBox {
+                            text: "Obrigatória";
+                            checked <=> root.new-var-required;
+                        }
+                    }
+                    Button {
+                        text: "+ Adicionar Coluna";
+                        primary: true;
+                        clicked => {
+                            root.create-variable(root.new-var-name, root.new-var-kind, root.new-var-required);
+                        }
+                    }
+                }
+
+                if root.variables.length > 0: ScrollView {
+                    max-height: 190px;
+                    VerticalLayout {
+                        spacing: 6px;
+                        for var[idx] in root.variables: Rectangle {
+                            border-radius: 6px;
+                            background: ThemeTokens.muted-bg;
+                            border-width: 1px;
+                            border-color: ThemeTokens.subtle-border;
+                            VerticalLayout {
+                                padding: 8px;
+                                spacing: 6px;
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        text: "#\{idx + 1}";
+                                        width: 28px;
+                                        vertical-alignment: center;
+                                        font-weight: 700;
+                                        color: ThemeTokens.text-secondary;
+                                    }
+                                    if root.edit-var-id != var.id: HorizontalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 8px;
+                                        Text {
+                                            text: var.display-name;
+                                            font-weight: 700;
+                                            vertical-alignment: center;
+                                            color: ThemeTokens.text-primary;
+                                        }
+                                        Text {
+                                            text: "(XML: <\{var.xml-name}>)";
+                                            font-size: 11px;
+                                            vertical-alignment: center;
+                                            color: ThemeTokens.info-fg;
+                                        }
+                                    }
+                                    if root.edit-var-id == var.id: HorizontalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 6px;
+                                        LineEdit {
+                                            text <=> root.edit-var-display;
+                                            placeholder-text: "Rótulo visível";
+                                        }
+                                        LineEdit {
+                                            width: 140px;
+                                            text <=> root.edit-var-xml;
+                                            placeholder-text: "Tag XML";
+                                        }
+                                        Button {
+                                            text: "Salvar";
+                                            primary: true;
+                                            clicked => {
+                                                root.commit-rename-variable(var.id, root.edit-var-display, root.edit-var-xml);
+                                            }
+                                        }
+                                        Button {
+                                            text: "Cancelar";
+                                            clicked => { root.cancel-rename-variable(); }
+                                        }
+                                    }
+
+                                    VerticalLayout {
+                                        alignment: center;
+                                        CheckBox {
+                                            text: "Foto";
+                                            checked: var.is-photo;
+                                            toggled => { root.toggle-variable-kind(var.id, self.checked); }
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        CheckBox {
+                                            text: "Obrig.";
+                                            checked: var.required;
+                                            toggled => { root.toggle-variable-required(var.id, self.checked); }
+                                        }
+                                    }
+                                    Button {
+                                        text: "▲";
+                                        enabled: idx > 0;
+                                        clicked => { root.move-variable(var.id, -1); }
+                                    }
+                                    Button {
+                                        text: "▼";
+                                        enabled: idx + 1 < root.variables.length;
+                                        clicked => { root.move-variable(var.id, 1); }
+                                    }
+                                    if root.edit-var-id != var.id: Button {
+                                        text: "Editar";
+                                        clicked => {
+                                            root.start-rename-variable(var.id, var.display-name, var.xml-name);
+                                        }
+                                    }
+                                    Button {
+                                        text: "Duplicar";
+                                        clicked => { root.duplicate-variable(var.id); }
+                                    }
+                                    Button {
+                                        text: "Excluir";
+                                        clicked => { root.request-delete-variable(var.id, var.display-name); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Collapsible clipboard paste panel
+        if root.show-paste-panel: Rectangle {
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 8px;
+
+                HorizontalLayout {
+                    spacing: 10px;
+                    Text {
+                        text: "Colar Bloco Tabular (Excel / Google Sheets / CSV)";
+                        font-size: 13px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        color: ThemeTokens.text-primary;
+                    }
+                    Text {
+                        text: "Linha inicial:";
+                        font-size: 12px;
+                        vertical-alignment: center;
+                        color: ThemeTokens.text-secondary;
+                    }
+                    Button {
+                        text: "-";
+                        enabled: root.paste-start-row-1based > 1;
+                        clicked => { root.paste-start-row-1based -= 1; }
+                    }
+                    Text {
+                        text: "\{root.paste-start-row-1based}";
+                        width: 28px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        font-weight: 700;
+                        color: ThemeTokens.text-primary;
+                    }
+                    Button {
+                        text: "+";
+                        clicked => { root.paste-start-row-1based += 1; }
+                    }
+                    Text {
+                        text: "Coluna inicial:";
+                        font-size: 12px;
+                        vertical-alignment: center;
+                        color: ThemeTokens.text-secondary;
+                    }
+                    ComboBox {
+                        width: 170px;
+                        model: root.existing-var-names;
+                        current-index <=> root.paste-start-col-index;
+                    }
+                }
+
+                TextEdit {
+                    height: 82px;
+                    text <=> root.paste-draft;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    Button {
+                        text: "Colar Direto do Ctrl+C (Windows)";
+                        primary: true;
+                        clicked => {
+                            root.paste-os-clipboard(root.paste-start-row-1based, root.paste-start-col-index);
+                        }
+                    }
+                    Button {
+                        text: "Aplicar Texto Acima";
+                        clicked => {
+                            root.paste-manual-block(root.paste-start-row-1based, root.paste-start-col-index, root.paste-draft);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Main grid card
+        Rectangle {
+            vertical-stretch: 1;
+            min-height: 0px;
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+
+            VerticalLayout {
+                // Header strip
+                Rectangle {
+                    height: 38px;
+                    background: ThemeTokens.muted-bg;
+
+                    Rectangle {
+                        y: parent.height - 1px;
+                        width: 100%;
+                        height: 1px;
+                        background: ThemeTokens.subtle-border;
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 8px;
+
+                        Text { text: "Sel."; width: 32px; vertical-alignment: center; font-size: 12px; font-weight: 700; color: ThemeTokens.text-secondary; }
+                        Text { text: "#"; width: 34px; vertical-alignment: center; font-size: 12px; font-weight: 700; color: ThemeTokens.text-secondary; }
+                        Text { text: "Ordem"; width: 66px; vertical-alignment: center; font-size: 12px; font-weight: 700; color: ThemeTokens.text-secondary; }
+                        Text { text: "Data Set (XML)"; width: 145px; vertical-alignment: center; font-size: 12px; font-weight: 700; color: ThemeTokens.text-primary; }
+                        for var in root.variables: Text {
+                            horizontal-stretch: 1;
+                            min-width: 120px;
+                            text: var.required ? "\{var.display-name} *" : var.display-name;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            font-size: 12px;
+                            font-weight: 700;
+                            color: var.is-photo ? ThemeTokens.info-fg : ThemeTokens.text-primary;
+                        }
+                    }
+                }
+
+                if root.variables.length == 0: VerticalLayout {
+                    vertical-stretch: 1;
+                    alignment: center;
+                    padding: 28px;
+                    spacing: 12px;
+                    Text {
+                        text: "Nenhuma coluna configurada neste projeto.";
+                        font-size: 15px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        color: ThemeTokens.text-primary;
+                    }
+                    Text {
+                        text: "Crie suas colunas de Texto ou Fotografia manualmente, ou importe uma planilha .xlsx / .csv para gerar colunas e registros automaticamente.";
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                        color: ThemeTokens.text-secondary;
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 10px;
+                        Button {
+                            text: "+ Criar Primeira Coluna";
+                            primary: true;
+                            clicked => { root.show-columns-panel = true; }
+                        }
+                        Button {
+                            text: "Importar Planilha (.xlsx / .csv)";
+                            clicked => { root.open-import-file(); }
+                        }
+                    }
+                }
+
+                if root.variables.length > 0 && root.rows.length == 0: VerticalLayout {
+                    vertical-stretch: 1;
+                    alignment: center;
+                    padding: 28px;
+                    spacing: 12px;
+                    Text {
+                        text: "Nenhum registro cadastrado ainda.";
+                        font-size: 15px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        color: ThemeTokens.text-primary;
+                    }
+                    Text {
+                        text: "Adicione linhas diretamente na tabela, cole dados do Excel ou importe uma planilha.";
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                        color: ThemeTokens.text-secondary;
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 10px;
+                        Button {
+                            text: "+ Adicionar Primeira Linha";
+                            primary: true;
+                            clicked => { root.add-record(); }
+                        }
+                        Button {
+                            text: "Importar Planilha (.xlsx / .csv)";
+                            clicked => { root.open-import-file(); }
+                        }
+                    }
+                }
+
+                if root.variables.length > 0 && root.rows.length > 0: ListView {
+                    vertical-stretch: 1;
+                    min-height: 0px;
+                    for row in root.rows: Rectangle {
+                        height: 48px;
+                        background: row.selected ? ThemeTokens.selected-row-bg :
+                            Math.mod(row.row-number, 2) == 0 ? ThemeTokens.stripe-bg : transparent;
+
+                        Rectangle {
+                            y: parent.height - 1px;
+                            width: 100%;
+                            height: 1px;
+                            background: ThemeTokens.subtle-border;
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            padding-top: 6px;
+                            padding-bottom: 6px;
+                            spacing: 8px;
+
+                            VerticalLayout {
+                                alignment: center;
+                                CheckBox {
+                                    width: 32px;
+                                    checked: row.selected;
+                                    toggled => { root.toggle-row-selection(row.record-id); }
+                                }
+                            }
+
+                            Text {
+                                width: 34px;
+                                text: "\{row.row-number}";
+                                vertical-alignment: center;
+                                font-size: 12px;
+                                font-weight: 600;
+                                color: row.has-issue ? ThemeTokens.err-fg : ThemeTokens.text-secondary;
+                            }
+
+                            VerticalLayout {
+                                alignment: center;
+                                HorizontalLayout {
+                                    width: 66px;
+                                    spacing: 2px;
+                                    Button {
+                                        text: "▲";
+                                        enabled: row.row-number > 1;
+                                        clicked => { root.move-record-up(row.record-id); }
+                                    }
+                                    Button {
+                                        text: "▼";
+                                        enabled: row.row-number < root.total-records;
+                                        clicked => { root.move-record-down(row.record-id); }
+                                    }
+                                }
+                            }
+
+                            VerticalLayout {
+                                alignment: center;
+                                LineEdit {
+                                    width: 145px;
+                                    text: row.dataset-name;
+                                    edited(v) => { root.dataset-name-edited(row.record-id, v); }
+                                    accepted(v) => {
+                                        root.dataset-name-edited(row.record-id, v);
+                                        root.refresh-diagnostics();
+                                    }
+                                }
+                            }
+
+                            for cell in row.cells: HorizontalLayout {
+                                horizontal-stretch: 1;
+                                min-width: 120px;
+                                spacing: 4px;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    LineEdit {
+                                        min-width: 90px;
+                                        text: cell.text;
+                                        placeholder-text: cell.is-photo ? "Chave ou foto..." : "";
+                                        edited(v) => {
+                                            root.cell-edited(row.record-id, cell.variable-id, v);
+                                        }
+                                        accepted(v) => {
+                                            root.cell-edited(row.record-id, cell.variable-id, v);
+                                            root.refresh-diagnostics();
+                                        }
+                                    }
+                                }
+
+                                if cell.status-label != "": VerticalLayout {
+                                    alignment: center;
+                                    Rectangle {
+                                        min-width: 28px;
+                                        height: 22px;
+                                        border-radius: 4px;
+                                        background: cell.is-missing-error ? ThemeTokens.err-bg :
+                                            cell.status-kind == 5 ? ThemeTokens.ok-bg :
+                                            cell.is-duplicate || cell.status-kind == 4 || cell.status-kind == 1 ? ThemeTokens.warn-bg :
+                                            ThemeTokens.muted-bg;
+
+                                        HorizontalLayout {
+                                            padding-left: 6px;
+                                            padding-right: 6px;
+                                            Text {
+                                                text: cell.status-label;
+                                                font-size: 10px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                                color: cell.is-missing-error ? ThemeTokens.err-fg :
+                                                    cell.status-kind == 5 ? ThemeTokens.ok-fg :
+                                                    cell.is-duplicate || cell.status-kind == 4 || cell.status-kind == 1 ? ThemeTokens.warn-fg :
+                                                    ThemeTokens.text-primary;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if cell.is-photo: VerticalLayout {
+                                    alignment: center;
+                                    Button {
+                                        text: "...";
+                                        clicked => { root.pick-cell-photo(row.record-id, cell.variable-id); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Footer pagination strip
+                Rectangle {
+                    height: 44px;
+                    background: ThemeTokens.muted-bg;
+                    Rectangle {
+                        y: 0px;
+                        width: 100%;
+                        height: 1px;
+                        background: ThemeTokens.subtle-border;
+                    }
+                    HorizontalLayout {
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        spacing: 10px;
+                        Text {
+                            text: "Total: \{root.total-records} registro(s)  •  Página \{root.current-page} de \{root.total-pages}";
+                            font-size: 12px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            color: ThemeTokens.text-secondary;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Button {
+                                    text: "Anterior";
+                                    enabled: root.current-page > 1;
+                                    clicked => { root.page-prev(); }
+                                }
+                                Button {
+                                    text: "Próxima";
+                                    enabled: root.current-page < root.total-pages;
+                                    clicked => { root.page-next(); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Spreadsheet Import Wizard Overlay
+    if root.show-import-wizard: Rectangle {
+        background: #00000099;
+        TouchArea {}
+
+        Rectangle {
+            width: min(880px, parent.width - 40px);
+            height: min(650px, parent.height - 40px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 8px;
+            background: ThemeTokens.card-bg;
+            border-width: 1px;
+            border-color: ThemeTokens.subtle-border;
+
+            VerticalLayout {
+                padding: 18px;
+                spacing: 12px;
+
+                HorizontalLayout {
+                    spacing: 10px;
+                    Text {
+                        text: "Assistente de Importação de Planilha";
+                        font-size: 16px;
+                        font-weight: 700;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                        color: ThemeTokens.text-primary;
+                    }
+                    Button {
+                        text: "Fechar";
+                        clicked => { root.close-import-wizard(); }
+                    }
+                }
+
+                Text {
+                    text: "Arquivo: \{root.import-file-path}";
+                    font-size: 12px;
+                    overflow: elide;
+                    color: ThemeTokens.info-fg;
+                }
+
+                HorizontalLayout {
+                    spacing: 12px;
+                    if root.import-sheets.length > 0: HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: "Aba:"; vertical-alignment: center; font-size: 12px; color: ThemeTokens.text-secondary; }
+                        ComboBox {
+                            width: 170px;
+                            model: root.import-sheets;
+                            current-index: root.import-sheet-index;
+                            selected => { root.import-sheet-changed(self.current-index); }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: "Linha de cabeçalho:"; vertical-alignment: center; font-size: 12px; color: ThemeTokens.text-secondary; }
+                        Button {
+                            text: "-";
+                            enabled: root.import-header-row-1based > 1;
+                            clicked => { root.import-header-row-changed(root.import-header-row-1based - 1); }
+                        }
+                        Text {
+                            text: "\{root.import-header-row-1based}";
+                            width: 24px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-weight: 700;
+                            color: ThemeTokens.text-primary;
+                        }
+                        Button {
+                            text: "+";
+                            clicked => { root.import-header-row-changed(root.import-header-row-1based + 1); }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 6px;
+                        Text { text: "Modo:"; vertical-alignment: center; font-size: 12px; color: ThemeTokens.text-secondary; }
+                        ComboBox {
+                            horizontal-stretch: 1;
+                            model: ["Adicionar registros ao final", "Substituir registros existentes"];
+                            current-index <=> root.import-mode-index;
+                        }
+                    }
+                }
+
+                Text {
+                    text: "Mapeamento das Colunas";
+                    font-size: 13px;
+                    font-weight: 700;
+                    color: ThemeTokens.text-primary;
+                }
+
+                Rectangle {
+                    vertical-stretch: 1;
+                    border-radius: 6px;
+                    background: ThemeTokens.surface-bg;
+                    border-width: 1px;
+                    border-color: ThemeTokens.subtle-border;
+
+                    ListView {
+                        for col in root.import-columns: Rectangle {
+                            height: 54px;
+                            Rectangle {
+                                y: parent.height - 1px;
+                                width: 100%;
+                                height: 1px;
+                                background: ThemeTokens.subtle-border;
+                            }
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                spacing: 8px;
+                                VerticalLayout {
+                                    width: 210px;
+                                    alignment: center;
+                                    Text {
+                                        text: col.source-header;
+                                        font-size: 12px;
+                                        font-weight: 700;
+                                        overflow: elide;
+                                        color: ThemeTokens.text-primary;
+                                    }
+                                    Text {
+                                        text: "Ex.: \{col.sample-preview}";
+                                        font-size: 11px;
+                                        overflow: elide;
+                                        color: ThemeTokens.text-secondary;
+                                    }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    ComboBox {
+                                        width: 205px;
+                                        model: root.existing-var-names.length > 0 ?
+                                            ["Ignorar coluna", "Criar coluna de Texto", "Criar coluna de Foto", "Mapear coluna existente"] :
+                                            ["Ignorar coluna", "Criar coluna de Texto", "Criar coluna de Foto"];
+                                        current-index: col.target-mode;
+                                        selected => { root.import-column-target-changed(col.source-index, self.current-index); }
+                                    }
+                                }
+                                if col.target-mode == 1 || col.target-mode == 2: VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    LineEdit {
+                                        text: col.new-name;
+                                        placeholder-text: "Nome da coluna";
+                                        edited(v) => { root.import-column-new-name-changed(col.source-index, v); }
+                                    }
+                                }
+                                if col.target-mode == 3 && root.existing-var-names.length > 0: VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    ComboBox {
+                                        model: root.existing-var-names;
+                                        current-index: col.existing-var-index;
+                                        selected => { root.import-column-existing-changed(col.source-index, self.current-index); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if root.import-preview-rows.length > 0: VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: "Prévia bruta das primeiras linhas:";
+                        font-size: 12px;
+                        font-weight: 700;
+                        color: ThemeTokens.text-secondary;
+                    }
+                    Rectangle {
+                        height: 98px;
+                        border-radius: 6px;
+                        background: ThemeTokens.surface-bg;
+                        border-width: 1px;
+                        border-color: ThemeTokens.subtle-border;
+                        ScrollView {
+                            VerticalLayout {
+                                padding: 8px;
+                                spacing: 3px;
+                                for prow in root.import-preview-rows: HorizontalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        text: "L\{prow.row-index}:";
+                                        width: 34px;
+                                        font-size: 11px;
+                                        font-weight: 700;
+                                        color: ThemeTokens.info-fg;
+                                    }
+                                    for ctext in prow.cells: Text {
+                                        width: 130px;
+                                        text: ctext;
+                                        font-size: 11px;
+                                        overflow: elide;
+                                        color: ThemeTokens.text-primary;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 10px;
+                    Button {
+                        text: "Cancelar";
+                        clicked => { root.close-import-wizard(); }
+                    }
+                    Button {
+                        text: "Concluir Importação";
+                        primary: true;
+                        clicked => { root.commit-import(); }
+                    }
+                }
+            }
+        }
+    }
+}
